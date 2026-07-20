@@ -1,9 +1,10 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Copy, Fingerprint, KeyRound, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { authClient } from '~/lib/auth-client'
-import { createApiKey, deleteApiKey, listApiKeys } from '~/lib/links'
+import { createApiKey, deleteApiKey } from '~/lib/links'
+import { getSettingsData } from '~/lib/settings'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
@@ -13,10 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '~
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 
 export const Route = createFileRoute('/dashboard/settings')({
-  loader: async () => {
-    const keys = await listApiKeys()
-    return { keys }
-  },
+  loader: () => getSettingsData(),
   component: SettingsPage,
 })
 
@@ -34,17 +32,12 @@ function SettingsPage() {
 // ---------- TOTP 2FA ----------
 
 function TwoFactorCard() {
-  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const { twoFactorEnabled } = Route.useLoaderData()
+  const [enabled, setEnabled] = useState(twoFactorEnabled)
   const [password, setPassword] = useState('')
   const [totpURI, setTotpURI] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    authClient.getSession().then(({ data }) => {
-      setEnabled(Boolean((data?.user as { twoFactorEnabled?: boolean } | undefined)?.twoFactorEnabled))
-    })
-  }, [])
 
   async function enable(e: React.FormEvent) {
     e.preventDefault()
@@ -93,7 +86,7 @@ function TwoFactorCard() {
         <CardDescription>Require a TOTP code from an authenticator app at sign-in.</CardDescription>
       </CardHeader>
       <CardContent>
-        {enabled === null ? null : enabled ? (
+        {enabled ? (
           <div className="flex items-center gap-3">
             <Badge>Enabled</Badge>
             <Button variant="outline" size="sm" onClick={disable}>Disable</Button>
@@ -134,12 +127,10 @@ function TwoFactorCard() {
 // ---------- Passkeys ----------
 
 function PasskeysCard() {
-  const [passkeys, setPasskeys] = useState<{ id: string; name?: string | null; createdAt?: Date | null }[]>([])
+  const router = useRouter()
+  const { passkeys } = Route.useLoaderData()
 
-  const refresh = () =>
-    authClient.passkey.listUserPasskeys().then(({ data }) => setPasskeys(data ?? []))
-
-  useEffect(() => { refresh() }, [])
+  const refresh = () => router.invalidate()
 
   async function add() {
     const name = prompt('Name this passkey (e.g. "MacBook Touch ID")') ?? undefined

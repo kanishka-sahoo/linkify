@@ -6,6 +6,9 @@ export function getRouter() {
     routeTree,
     scrollRestoration: true,
     defaultPreload: 'intent',
+    // Cache loader data briefly: navigating between pages doesn't refetch.
+    // Every mutation in the app calls router.invalidate(), which bypasses this.
+    defaultStaleTime: 30_000,
   })
   return router
 }

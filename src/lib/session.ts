@@ -11,9 +11,9 @@ import { count } from 'drizzle-orm'
  * needsSetup() + getSession() calls in route beforeLoad hooks.
  */
 export const getBootstrap = createServerFn({ method: 'GET' }).handler(async () => {
-  const [session, [{ value }]] = await Promise.all([
-    auth.api.getSession({ headers: getRequestHeaders() }),
-    db.select({ value: count() }).from(user),
-  ])
-  return { needsSetup: value === 0, user: session?.user ?? null }
+  const session = await auth.api.getSession({ headers: getRequestHeaders() })
+  // A valid session proves at least one user exists — skip the count query.
+  if (session) return { needsSetup: false, user: session.user }
+  const [{ value }] = await db.select({ value: count() }).from(user)
+  return { needsSetup: value === 0, user: null }
 })
