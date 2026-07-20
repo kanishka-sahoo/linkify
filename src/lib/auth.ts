@@ -36,12 +36,14 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async () => {
-          // Single-tenant lockdown: only the very first user may register.
+        before: async (_userData, ctx) => {
           const [{ value }] = await db.select({ value: count() }).from(user)
-          if (value > 0) {
-            throw new Error('Registration is closed')
-          }
+          if (value === 0) return // first-run setup is always allowed
+          // After that, accounts can only be created by a signed-in team member.
+          const session = ctx?.headers
+            ? await auth.api.getSession({ headers: ctx.headers }).catch(() => null)
+            : null
+          if (!session) throw new Error('Registration is closed')
         },
       },
     },
