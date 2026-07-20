@@ -1,16 +1,16 @@
 import { Link, Outlet, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
-import { Link2, Settings, LogOut } from 'lucide-react'
-import { getSession, needsSetup } from '~/lib/session'
+import { Link2, Settings, LogOut, Users } from 'lucide-react'
+import { getBootstrap } from '~/lib/session'
 import { authClient } from '~/lib/auth-client'
 import { Button } from '~/components/ui/button'
 import { ThemeToggle } from '~/components/theme-toggle'
 
 export const Route = createFileRoute('/dashboard')({
   beforeLoad: async () => {
-    if (await needsSetup()) throw redirect({ to: '/setup' })
-    const session = await getSession()
-    if (!session) throw redirect({ to: '/login' })
-    return { user: session.user }
+    const { needsSetup, user } = await getBootstrap()
+    if (needsSetup) throw redirect({ to: '/setup' })
+    if (!user) throw redirect({ to: '/login' })
+    return { user }
   },
   component: DashboardLayout,
 })
@@ -40,6 +40,17 @@ function DashboardLayout() {
             >
               Links
             </Link>
+            {user.role === 'admin' && (
+              <Link
+                to="/dashboard/users"
+                activeProps={{ className: 'text-foreground font-medium' }}
+                inactiveProps={{ className: 'text-muted-foreground hover:text-foreground' }}
+              >
+                <span className="flex items-center gap-1">
+                  <Users className="h-3.5 w-3.5" /> Users
+                </span>
+              </Link>
+            )}
             <Link
               to="/dashboard/settings"
               activeProps={{ className: 'text-foreground font-medium' }}

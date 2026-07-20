@@ -10,6 +10,13 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: 'pg',
   }),
+  user: {
+    additionalFields: {
+      // 'admin' | 'user' — first account created becomes admin; only admins
+      // can create accounts after that (enforced in the hook below).
+      role: { type: 'string', defaultValue: 'user', input: false },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     // Sign-up is only possible while no user exists (enforced below and in the UI).
@@ -36,14 +43,17 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (_userData, ctx) => {
+        before: async (userData, ctx) => {
           const [{ value }] = await db.select({ value: count() }).from(user)
-          if (value === 0) return // first-run setup is always allowed
-          // After that, accounts can only be created by a signed-in team member.
+          // First-run setup: the very first account becomes the admin.
+          if (value === 0) return { data: { ...userData, role: 'admin' } }
+          // After that, accounts can only be created by a signed-in admin.
           const session = ctx?.headers
             ? await auth.api.getSession({ headers: ctx.headers }).catch(() => null)
             : null
-          if (!session) throw new Error('Registration is closed')
+          if (!session || session.user.role !== 'admin') {
+            throw new Error('Only an admin can create accounts')
+          }
         },
       },
     },

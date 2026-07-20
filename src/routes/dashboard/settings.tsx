@@ -1,10 +1,9 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Copy, Fingerprint, KeyRound, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
+import { Copy, Fingerprint, KeyRound, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { authClient } from '~/lib/auth-client'
 import { createApiKey, deleteApiKey, listApiKeys } from '~/lib/links'
-import { createUser, deleteUser, listUsers } from '~/lib/users'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
@@ -15,8 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 
 export const Route = createFileRoute('/dashboard/settings')({
   loader: async () => {
-    const [keys, users] = await Promise.all([listApiKeys(), listUsers()])
-    return { keys, users }
+    const keys = await listApiKeys()
+    return { keys }
   },
   component: SettingsPage,
 })
@@ -25,142 +24,10 @@ function SettingsPage() {
   return (
     <div className="grid max-w-3xl gap-6">
       <h1 className="text-xl font-semibold">Settings</h1>
-      <TeamMembersCard />
       <TwoFactorCard />
       <PasskeysCard />
       <ApiKeysCard />
     </div>
-  )
-}
-
-// ---------- Team members ----------
-
-function TeamMembersCard() {
-  const router = useRouter()
-  const users = Route.useLoaderData().users
-  const [myId, setMyId] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    authClient.getSession().then(({ data }) => setMyId(data?.user.id ?? null))
-  }, [])
-
-  async function add(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      await createUser({ data: { name, email, password } })
-      toast.success(`Account created for ${email}`)
-      setOpen(false)
-      setName('')
-      setEmail('')
-      setPassword('')
-      router.invalidate()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create user')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function remove(id: string, userEmail: string) {
-    if (!confirm(`Delete the account for ${userEmail}? Their sessions end immediately.`)) return
-    try {
-      await deleteUser({ data: { id } })
-      toast.success('Account deleted')
-      router.invalidate()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to delete user')
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" /> Team members
-        </CardTitle>
-        <CardDescription>
-          Everyone here can sign in and manage all links. New members should enable 2FA on first login.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>2FA</TableHead>
-              <TableHead>Joined</TableHead>
-              <TableHead className="w-[60px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell>
-                  {u.name} {u.id === myId && <Badge variant="secondary" className="ml-1">you</Badge>}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                <TableCell>
-                  {u.twoFactorEnabled ? <Badge>on</Badge> : <Badge variant="outline">off</Badge>}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {new Date(u.createdAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  {u.id !== myId && (
-                    <Button variant="ghost" size="icon" onClick={() => remove(u.id, u.email)}>
-                      <Trash2 className="text-destructive" />
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        <div>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-            <Plus /> Add member
-          </Button>
-        </div>
-
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add a team member</DialogTitle>
-              <DialogDescription>
-                They can change their password after signing in. Share these credentials securely.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={add} className="grid gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="member-name">Name</Label>
-                <Input id="member-name" value={name} onChange={(e) => setName(e.target.value)} required />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="member-email">Email</Label>
-                <Input id="member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="member-password">Temporary password</Label>
-                <Input
-                  id="member-password" type="password" minLength={8}
-                  value={password} onChange={(e) => setPassword(e.target.value)} required
-                />
-              </div>
-              <DialogFooter>
-                <Button type="submit" disabled={loading}>{loading ? 'Creating…' : 'Create account'}</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
   )
 }
 

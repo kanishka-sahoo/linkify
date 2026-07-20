@@ -5,19 +5,29 @@ import { auth } from './auth'
 import { db } from './db'
 import { user } from './schema'
 
-async function requireUser() {
+async function requireAdmin() {
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
   if (!session) throw new Error('Unauthorized')
+  if (session.user.role !== 'admin') throw new Error('Admin access required')
   return session.user
 }
 
+async function adminCount() {
+  const [{ value }] = await db
+    .select({ value: count() })
+    .from(user)
+    .where(eq(user.role, 'admin'))
+  return value
+}
+
 export const listUsers = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireUser()
+  await requireAdmin()
   return db
     .select({
       id: user.id,
       name: user.name,
       email: user.email,
+      role: user.role,
       twoFactorEnabled: user.twoFactorEnabled,
       createdAt: user.createdAt,
     })
@@ -28,7 +38,7 @@ export const listUsers = createServerFn({ method: 'GET' }).handler(async () => {
 export const createUser = createServerFn({ method: 'POST' })
   .validator((input: { name: string; email: string; password: string }) => input)
   .handler(async ({ data }) => {
-    await requireUser()
+    await requireAdmin()
     if (!data.name?.trim()) throw new Error('Name is required')
     if (!data.email?.includes('@')) throw new Error('Valid email is required')
     if (!data.password || data.password.length < 8)
@@ -46,13 +56,41 @@ export const createUser = createServerFn({ method: 'POST' })
     return { id: result.user.id, email: result.user.email }
   })
 
+export const setUserRole = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; role: 'admin' | 'user' }) => input)
+  .handler(async ({ data }) => {
+    const me = await requireAdmin()
+    if (data.id === me.id) throw new Error("You can't change your own role")
+    if (data.role !== 'admin') {
+      const [target] = await db
+        .select({ role: user.role })
+        .from(user)
+        .where(eq(user.id, data.id))
+      if (target?.role === 'admin' && (await adminCount()) <= 1) {
+        throw new Error("You can't demote the last admin")
+      }
+    }
+    await db
+      .update(user)
+      .set({ role: data.role, updatedAt: new Date() })
+      .where(eq(user.id, data.id))
+    return { ok: true }
+  })
+
 export const deleteUser = createServerFn({ method: 'POST' })
   .validator((input: { id: string }) => input)
   .handler(async ({ data }) => {
-    const me = await requireUser()
+    const me = await requireAdmin()
     if (data.id === me.id) throw new Error("You can't delete your own account")
     const [{ value }] = await db.select({ value: count() }).from(user)
     if (value <= 1) throw new Error("You can't delete the last account")
+    const [target] = await db
+      .select({ role: user.role })
+      .from(user)
+      .where(eq(user.id, data.id))
+    if (target?.role === 'admin' && (await adminCount()) <= 1) {
+      throw new Error("You can't delete the last admin")
+    }
     // Cascades to sessions, accounts, passkeys and 2FA rows.
     await db.delete(user).where(eq(user.id, data.id))
     return { ok: true }

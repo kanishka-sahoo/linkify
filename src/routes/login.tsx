@@ -2,7 +2,7 @@ import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { KeyRound } from 'lucide-react'
-import { needsSetup, getSession } from '~/lib/session'
+import { getBootstrap } from '~/lib/session'
 import { authClient } from '~/lib/auth-client'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
@@ -11,8 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 
 export const Route = createFileRoute('/login')({
   beforeLoad: async () => {
-    if (await needsSetup()) throw redirect({ to: '/setup' })
-    if (await getSession()) throw redirect({ to: '/dashboard' })
+    const { needsSetup, user } = await getBootstrap()
+    if (needsSetup) throw redirect({ to: '/setup' })
+    if (user) throw redirect({ to: '/dashboard' })
   },
   component: LoginPage,
 })

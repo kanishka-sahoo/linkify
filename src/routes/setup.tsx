@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { needsSetup } from '~/lib/session'
+import { getBootstrap } from '~/lib/session'
 import { authClient } from '~/lib/auth-client'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 
 export const Route = createFileRoute('/setup')({
   beforeLoad: async () => {
-    if (!(await needsSetup())) throw redirect({ to: '/login' })
+    if (!(await getBootstrap()).needsSetup) throw redirect({ to: '/login' })
   },
   component: SetupPage,
 })
@@ -40,7 +40,7 @@ function SetupPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Welcome to Linkify</CardTitle>
-          <CardDescription>Create the owner account. This is a one-time setup.</CardDescription>
+          <CardDescription>Create the admin account. This is a one-time setup.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="grid gap-4">

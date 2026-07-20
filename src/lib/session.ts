@@ -5,14 +5,15 @@ import { db } from './db'
 import { user } from './schema'
 import { count } from 'drizzle-orm'
 
-/** Returns the current session or null. */
-export const getSession = createServerFn({ method: 'GET' }).handler(async () => {
-  const session = await auth.api.getSession({ headers: getRequestHeaders() })
-  return session
-})
-
-/** True while zero users exist — first-run setup is allowed only then. */
-export const needsSetup = createServerFn({ method: 'GET' }).handler(async () => {
-  const [{ value }] = await db.select({ value: count() }).from(user)
-  return value === 0
+/**
+ * One round trip that answers both routing questions every page asks:
+ * is first-run setup needed, and who is signed in. Replaces separate
+ * needsSetup() + getSession() calls in route beforeLoad hooks.
+ */
+export const getBootstrap = createServerFn({ method: 'GET' }).handler(async () => {
+  const [session, [{ value }]] = await Promise.all([
+    auth.api.getSession({ headers: getRequestHeaders() }),
+    db.select({ value: count() }).from(user),
+  ])
+  return { needsSetup: value === 0, user: session?.user ?? null }
 })
