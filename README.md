@@ -62,7 +62,7 @@ A single-user / small-team link shortener with analytics, built on TanStack Star
 2. Set the env vars above in the project settings (`APP_BASE_URL` = your production domain).
 3. Deploy. Click analytics geo fields (`country`, `city`, `ip`) populate automatically from Vercel's request headers.
 
-**Schema migrations run automatically**: the build command is `drizzle-kit migrate && vite build`, so every deploy first brings `DATABASE_URL`'s database up to date with the committed migrations in `drizzle/`. `DATABASE_URL` must be available at build time (Vercel exposes project env vars to builds by default). Note that preview deployments also run migrations against whatever `DATABASE_URL` they see — use the Neon Vercel integration's per-preview branches, or only merge schema changes when you're ready for them to hit the production database.
+**Schema migrations run automatically**: the build command is `node scripts/migrate.mjs && vite build`, so every deploy first brings `DATABASE_URL`'s database up to date with the committed migrations in `drizzle/`. The script handles three states: fresh databases get all migrations, previously migrated databases get only pending ones, and pre-existing databases provisioned via `db:push` (possibly schema-drifted) are reconciled with `drizzle-kit push` and baselined before the migrator takes over. `DATABASE_URL` must be available at build time (Vercel exposes project env vars to builds by default). Note that preview deployments also run migrations against whatever `DATABASE_URL` they see — use the Neon Vercel integration's per-preview branches, or only merge schema changes when you're ready for them to hit the production database.
 
 ## API
 
