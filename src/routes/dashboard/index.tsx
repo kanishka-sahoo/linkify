@@ -1,4 +1,4 @@
-import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
+import { Link, createFileRoute, useRouter, useRouteContext } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
@@ -8,6 +8,7 @@ import {
 import {
   bulkDeleteLinks, bulkExpireLinks, deleteLink, getOverview, listLinks,
 } from '~/lib/links'
+import { listUserDirectory } from '~/lib/users'
 import type { Link as LinkRow } from '~/lib/schema'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
@@ -20,8 +21,8 @@ import { LinkFormDialog } from '~/components/link-form'
 
 export const Route = createFileRoute('/dashboard/')({
   loader: async () => {
-    const [links, overview] = await Promise.all([listLinks(), getOverview()])
-    return { links, overview }
+    const [links, overview, users] = await Promise.all([listLinks(), getOverview(), listUserDirectory()])
+    return { links, overview, users }
   },
   component: LinksPage,
 })
@@ -43,11 +44,17 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
 
 const isExpired = (l: LinkRow) => Boolean(l.expiresAt && new Date(l.expiresAt) < new Date())
 
+const UNTAGGED = '__untagged__'
+
 function LinksPage() {
   const router = useRouter()
-  const { links, overview } = Route.useLoaderData()
+  const { user } = useRouteContext({ from: '/dashboard' })
+  const isAdmin = user?.role === 'admin'
+  const { links, overview, users } = Route.useLoaderData()
+  const ownerById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users])
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortAsc, setSortAsc] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -55,15 +62,34 @@ function LinksPage() {
   const [editing, setEditing] = useState<LinkRow | null>(null)
   const [qrFor, setQrFor] = useState<string | null>(null)
 
+  const allTags = useMemo(
+    () => [...new Set(links.flatMap((l) => l.tags))].sort(),
+    [links],
+  )
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase()
-    let rows = links.filter(
-      (l) =>
-        !q ||
-        l.code.toLowerCase().includes(q) ||
-        l.url.toLowerCase().includes(q) ||
-        (l.title ?? '').toLowerCase().includes(q),
-    )
+    let rows = links.filter((l) => {
+      if (q) {
+        const owner = l.userId ? ownerById.get(l.userId) : null
+        const haystack = [
+          l.code,
+          l.url,
+          l.title ?? '',
+          ...l.tags,
+          ...(owner ? [owner.email, owner.name] : []),
+        ]
+          .join('\n')
+          .toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+    if (activeTags.size > 0) {
+      rows = rows.filter((l) =>
+        [...activeTags].some((t) => (t === UNTAGGED ? l.tags.length === 0 : l.tags.includes(t))),
+      )
+    }
     switch (status) {
       case 'active':
         rows = rows.filter((l) => !isExpired(l))
@@ -89,7 +115,14 @@ function LinksPage() {
       return String(av).localeCompare(String(bv)) * dir
     })
     return rows
-  }, [links, query, status, sortKey, sortAsc])
+  }, [links, query, status, activeTags, sortKey, sortAsc, ownerById])
+
+  function toggleTag(tag: string) {
+    const next = new Set(activeTags)
+    if (next.has(tag)) next.delete(tag)
+    else next.add(tag)
+    setActiveTags(next)
+  }
 
   const refresh = () => {
     setSelected(new Set())
@@ -154,13 +187,14 @@ function LinksPage() {
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
     }
     const csv = [
-      'code,short_url,destination,title,clicks,created_at,expires_at,password_protected',
+      'code,short_url,destination,title,tags,clicks,created_at,expires_at,password_protected',
       ...rows.map((l) =>
         [
           esc(l.code),
           esc(shortUrl(l.code)),
           esc(l.url),
           esc(l.title),
+          esc(l.tags.join(' ')),
           l.clickCount,
           esc(l.createdAt ? new Date(l.createdAt).toISOString() : null),
           esc(l.expiresAt ? new Date(l.expiresAt).toISOString() : null),
@@ -213,6 +247,41 @@ function LinksPage() {
         </Button>
       </div>
 
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Tags:</span>
+          {allTags.map((t) => (
+            <Button
+              key={t}
+              variant={activeTags.has(t) ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => toggleTag(t)}
+            >
+              {t}
+            </Button>
+          ))}
+          <Button
+            variant={activeTags.has(UNTAGGED) ? 'default' : 'outline'}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => toggleTag(UNTAGGED)}
+          >
+            Untagged
+          </Button>
+          {activeTags.size > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setActiveTags(new Set())}
+            >
+              <X /> Clear
+            </Button>
+          )}
+        </div>
+      )}
+
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2">
           <span className="text-sm font-medium">{selected.size} selected</span>
@@ -247,13 +316,14 @@ function LinksPage() {
               <SortableHead label="Destination" sortKeyName="url" currentKey={sortKey} asc={sortAsc} onSort={toggleSort} className="hidden md:table-cell" />
               <SortableHead label="Clicks" sortKeyName="clickCount" currentKey={sortKey} asc={sortAsc} onSort={toggleSort} className="text-right" />
               <SortableHead label="Created" sortKeyName="createdAt" currentKey={sortKey} asc={sortAsc} onSort={toggleSort} className="hidden sm:table-cell" />
+              {isAdmin && <TableHead className="hidden lg:table-cell">Owner</TableHead>}
               <TableHead className="w-[160px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={isAdmin ? 7 : 6} className="py-10 text-center text-muted-foreground">
                   {links.length === 0 ? 'No links yet — create your first one.' : 'No matches.'}
                 </TableCell>
               </TableRow>
@@ -285,6 +355,20 @@ function LinksPage() {
                     )}
                   </div>
                   {link.title && <div className="text-xs text-muted-foreground">{link.title}</div>}
+                  {link.tags.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {link.tags.map((t) => (
+                        <button key={t} onClick={() => toggleTag(t)} title={`Filter by ${t}`}>
+                          <Badge
+                            variant={activeTags.has(t) ? 'default' : 'secondary'}
+                            className="cursor-pointer text-[10px]"
+                          >
+                            {t}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="hidden max-w-[300px] truncate md:table-cell">
                   <a href={link.url} target="_blank" rel="noreferrer" className="text-muted-foreground hover:underline">
@@ -295,6 +379,11 @@ function LinksPage() {
                 <TableCell className="hidden text-muted-foreground sm:table-cell">
                   {new Date(link.createdAt).toLocaleDateString()}
                 </TableCell>
+                {isAdmin && (
+                  <TableCell className="hidden text-muted-foreground lg:table-cell">
+                    {link.userId ? (ownerById.get(link.userId)?.email ?? '—') : '—'}
+                  </TableCell>
+                )}
                 <TableCell>
                   <div className="flex justify-end gap-1">
                     <Button variant="ghost" size="icon" title="Analytics" asChild>

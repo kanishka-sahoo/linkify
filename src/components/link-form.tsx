@@ -29,6 +29,7 @@ export function LinkFormDialog({ open, onOpenChange, link, onSaved }: Props) {
   const [url, setUrl] = useState('')
   const [code, setCode] = useState('')
   const [title, setTitle] = useState('')
+  const [tags, setTags] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [password, setPassword] = useState('')
   const [removePassword, setRemovePassword] = useState(false)
@@ -39,6 +40,7 @@ export function LinkFormDialog({ open, onOpenChange, link, onSaved }: Props) {
       setUrl(link?.url ?? '')
       setCode(link?.code ?? '')
       setTitle(link?.title ?? '')
+      setTags((link?.tags ?? []).join(', '))
       setExpiresAt(toLocalInputValue(link?.expiresAt))
       setPassword('')
       setRemovePassword(false)
@@ -52,6 +54,7 @@ export function LinkFormDialog({ open, onOpenChange, link, onSaved }: Props) {
       url,
       code: code || undefined,
       title: title || undefined,
+      tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       password: password || undefined,
     }
@@ -109,6 +112,16 @@ export function LinkFormDialog({ open, onOpenChange, link, onSaved }: Props) {
               <Label htmlFor="title">Title (optional)</Label>
               <Input id="title" placeholder="Launch post" value={title} onChange={(e) => setTitle(e.target.value)} />
             </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="tags">Tags (optional)</Label>
+            <Input
+              id="tags"
+              placeholder="launch, twitter, q3"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Comma-separated, up to 10.</p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="expires">Expiry (optional)</Label>

@@ -4,22 +4,32 @@ import { desc, eq } from 'drizzle-orm'
 import { db } from '~/lib/db'
 import { links } from '~/lib/schema'
 import { resolveApiKey, hashPassword } from '~/lib/keys'
+import { normalizeTags, ownedByClause } from '~/lib/links'
+import { hitLimit } from '~/lib/ratelimit'
 
-function json(data: unknown, status = 200) {
+function json(data: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
   })
 }
 
 const CODE_RE = /^[a-zA-Z0-9_-]{1,64}$/
 
+const CREATE_LIMIT = 30
+const CREATE_WINDOW_MS = 60 * 60 * 1000
+
 export const Route = createFileRoute('/api/v1/links')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!(await resolveApiKey(request))) return json({ error: 'Unauthorized' }, 401)
-        const rows = await db.select().from(links).orderBy(desc(links.createdAt))
+        const key = await resolveApiKey(request)
+        if (!key) return json({ error: 'Unauthorized' }, 401)
+        const rows = await db
+          .select()
+          .from(links)
+          .where(ownedByClause({ id: key.userId, role: key.role }))
+          .orderBy(desc(links.createdAt))
         return json({
           links: rows.map(({ passwordHash, ...l }) => ({
             ...l,
@@ -28,11 +38,13 @@ export const Route = createFileRoute('/api/v1/links')({
         })
       },
       POST: async ({ request }) => {
-        if (!(await resolveApiKey(request))) return json({ error: 'Unauthorized' }, 401)
+        const key = await resolveApiKey(request)
+        if (!key) return json({ error: 'Unauthorized' }, 401)
         let body: {
           url?: string
           code?: string
           title?: string
+          tags?: string[]
           expiresAt?: string
           password?: string
         }
@@ -48,10 +60,28 @@ export const Route = createFileRoute('/api/v1/links')({
         } catch {
           return json({ error: 'url must be a valid http(s) URL' }, 400)
         }
+        if (body.tags !== undefined && !Array.isArray(body.tags)) {
+          return json({ error: 'tags must be an array of strings' }, 400)
+        }
+        let tags: string[]
+        try {
+          tags = normalizeTags(body.tags)
+        } catch (err) {
+          return json({ error: err instanceof Error ? err.message : 'invalid tags' }, 400)
+        }
         const code = body.code ?? nanoid(7)
         if (!CODE_RE.test(code)) return json({ error: 'invalid code' }, 400)
         const [existing] = await db.select({ id: links.id }).from(links).where(eq(links.code, code))
         if (existing) return json({ error: `code "${code}" is already taken` }, 409)
+
+        if (key.userId) {
+          const { allowed, retryAfterSec } = await hitLimit(`create:${key.userId}`, CREATE_LIMIT, CREATE_WINDOW_MS)
+          if (!allowed) {
+            return json({ error: 'Rate limit reached — link creation is capped at 30/hour' }, 429, {
+              'retry-after': String(retryAfterSec),
+            })
+          }
+        }
 
         const [row] = await db
           .insert(links)
@@ -60,8 +90,10 @@ export const Route = createFileRoute('/api/v1/links')({
             code,
             url: body.url,
             title: body.title ?? null,
+            tags,
             expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
             passwordHash: body.password ? hashPassword(body.password) : null,
+            userId: key.userId,
           })
           .returning()
         const { passwordHash, ...rest } = row

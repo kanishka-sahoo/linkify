@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { pgTable, text, timestamp, boolean, integer, index } from 'drizzle-orm/pg-core'
 
 // ---------- better-auth core tables ----------
@@ -91,13 +92,19 @@ export const links = pgTable(
     code: text('code').notNull().unique(),
     url: text('url').notNull(),
     title: text('title'),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     passwordHash: text('password_hash'),
     expiresAt: timestamp('expires_at'),
     clickCount: integer('click_count').notNull().default(0),
+    // Nullable: legacy rows backfilled to the first admin; null = admin-owned.
+    userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => [index('links_code_idx').on(t.code)],
+  (t) => [index('links_code_idx').on(t.code), index('links_user_idx').on(t.userId)],
 )
 
 export const clicks = pgTable(
@@ -128,8 +135,17 @@ export const apiKeys = pgTable('api_keys', {
   name: text('name').notNull(),
   keyHash: text('key_hash').notNull().unique(),
   keyPrefix: text('key_prefix').notNull(),
+  // Nullable: legacy rows backfilled to the first admin; null = admin-owned.
+  userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at'),
+})
+
+// Fixed-window rate limit counters, e.g. 'pw:<linkId>:<ipHash>' or 'create:<userId>'.
+export const rateLimits = pgTable('rate_limits', {
+  key: text('key').primaryKey(),
+  count: integer('count').notNull(),
+  resetAt: timestamp('reset_at').notNull(),
 })
 
 export type Link = typeof links.$inferSelect

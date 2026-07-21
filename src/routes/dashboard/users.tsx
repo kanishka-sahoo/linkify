@@ -56,7 +56,7 @@ function UsersPage() {
   }
 
   async function remove(id: string, userEmail: string) {
-    if (!confirm(`Delete the account for ${userEmail}? Their sessions end immediately.`)) return
+    if (!confirm(`Delete the account for ${userEmail}? Their links, analytics and API keys are deleted too, and their sessions end immediately.`)) return
     try {
       await deleteUser({ data: { id } })
       toast.success('Account deleted')

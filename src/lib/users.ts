@@ -12,6 +12,16 @@ async function requireAdmin() {
   return session.user
 }
 
+/** id/name/email of every account — used to label link owners. Any signed-in user may call it. */
+export const listUserDirectory = createServerFn({ method: 'GET' }).handler(async () => {
+  const session = await auth.api.getSession({ headers: getRequestHeaders() })
+  if (!session) throw new Error('Unauthorized')
+  return db
+    .select({ id: user.id, name: user.name, email: user.email })
+    .from(user)
+    .orderBy(asc(user.createdAt))
+})
+
 async function adminCount() {
   const [{ value }] = await db
     .select({ value: count() })

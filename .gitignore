@@ -5,5 +5,3 @@ dist
 .env
 .env.local
 routeTree.gen.ts
-drizzle/*.sql
-!drizzle/meta

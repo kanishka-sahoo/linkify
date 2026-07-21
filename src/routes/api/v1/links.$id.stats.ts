@@ -3,6 +3,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import { db } from '~/lib/db'
 import { clicks, links } from '~/lib/schema'
 import { resolveApiKey } from '~/lib/keys'
+import { ownedByClause } from '~/lib/links'
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -15,8 +16,13 @@ export const Route = createFileRoute('/api/v1/links/$id/stats')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!(await resolveApiKey(request))) return json({ error: 'Unauthorized' }, 401)
-        const [link] = await db.select().from(links).where(eq(links.id, params.id))
+        const key = await resolveApiKey(request)
+        if (!key) return json({ error: 'Unauthorized' }, 401)
+        const owned = ownedByClause({ id: key.userId, role: key.role })
+        const [link] = await db
+          .select()
+          .from(links)
+          .where(owned ? and(eq(links.id, params.id), owned) : eq(links.id, params.id))
         if (!link) return json({ error: 'Not found' }, 404)
 
         const url = new URL(request.url)

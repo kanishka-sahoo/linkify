@@ -5,13 +5,15 @@ A single-user / small-team link shortener with analytics, built on TanStack Star
 ## Features
 
 - **Short links** — random or custom codes, optional titles
+- **Tags** — up to 10 per link, with filter chips and tag search on the dashboard
+- **Teams & ownership** — role-based access (admin/user); non-admin users see and manage only their own links and stats, admins see everything with an owner column
 - **Expiry** — links return 410 after a configurable date/time
-- **Password protection** — visitors must enter a password before being redirected
+- **Password protection** — visitors must enter a password before being redirected; brute-force attempts are rate-limited (5 failures per link+IP locks for 15 min)
 - **Analytics** — every click records IP, country/city (via Vercel geo headers), user agent, browser/OS/device, referrer, and bot vs human detection
-- **Dashboards** — clicks-over-time chart, country/referrer/browser/OS/device breakdowns, bot ratio, raw click log
+- **Dashboards** — clicks-over-time chart, country/referrer/browser/OS/device breakdowns, bot ratio, raw click log; text search across code/URL/title/tags/owner plus status filters, bulk delete/expire/CSV-export
 - **QR codes** — per-link PNG generation (`/api/qr/:code`)
-- **Auth** — email + password, TOTP two-factor, and passkeys (single-tenant: only the first registered account exists)
-- **REST API** — manage links and read stats with bearer API keys
+- **Auth** — email + password, TOTP two-factor, and passkeys. The first registered account becomes the admin; afterwards only admins can create accounts (Settings → Users)
+- **REST API** — manage links and read stats with bearer API keys; keys are per-user and scoped to that user's links (admin keys see all); link creation is capped at 30/hour per user
 
 ## Stack
 
@@ -41,10 +43,10 @@ A single-user / small-team link shortener with analytics, built on TanStack Star
 3. **Create the tables**
 
    ```bash
-   npm run db:push
+   npm run db:migrate
    ```
 
-   (or `npm run db:generate && npm run db:migrate` for versioned migrations)
+   Migrations live in `drizzle/` and are committed to the repo. To change the schema: edit `src/lib/schema.ts`, run `npm run db:generate` to emit a migration, apply it locally with `npm run db:migrate`, and commit both files. (`npm run db:push` is still available for quick throwaway-dev-DB iteration, but anything meant for production should go through a generated migration.)
 
 4. **Run**
 
@@ -60,6 +62,8 @@ A single-user / small-team link shortener with analytics, built on TanStack Star
 2. Set the env vars above in the project settings (`APP_BASE_URL` = your production domain).
 3. Deploy. Click analytics geo fields (`country`, `city`, `ip`) populate automatically from Vercel's request headers.
 
+**Schema migrations run automatically**: the build command is `drizzle-kit migrate && vite build`, so every deploy first brings `DATABASE_URL`'s database up to date with the committed migrations in `drizzle/`. `DATABASE_URL` must be available at build time (Vercel exposes project env vars to builds by default). Note that preview deployments also run migrations against whatever `DATABASE_URL` they see — use the Neon Vercel integration's per-preview branches, or only merge schema changes when you're ready for them to hit the production database.
+
 ## API
 
 Authenticate with `Authorization: Bearer <key>` (create keys in **Settings → API keys**).
@@ -67,7 +71,7 @@ Authenticate with `Authorization: Bearer <key>` (create keys in **Settings → A
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/links` | List links |
-| `POST` | `/api/v1/links` | Create link `{ url, code?, title?, expiresAt?, password? }` |
+| `POST` | `/api/v1/links` | Create link `{ url, code?, title?, tags?, expiresAt?, password? }` |
 | `GET` | `/api/v1/links/:id` | Get one link |
 | `PATCH` | `/api/v1/links/:id` | Update fields (pass `password: null` to remove protection) |
 | `DELETE` | `/api/v1/links/:id` | Delete link and its clicks |
@@ -87,3 +91,4 @@ curl -X POST https://your-domain/api/v1/links \
 - Redirects issue `302` with `cache-control: no-store` so every hit is counted.
 - Click capture failures never block a redirect — they're logged and swallowed.
 - Reserved codes: `dashboard`, `login`, `setup`, `api`.
+- Rate limits live in the `rate_limits` table (fixed windows), so they hold across serverless instances: password guesses are capped at 5 per 15 min per link+IP, and link creation at 30/hour per user (dashboard and API alike).
