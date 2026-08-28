@@ -1,0 +1,60 @@
+{
+  "name": "linkify",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "build:with-migrations": "node scripts/migrate.mjs && vite build",
+    "preview": "vite preview",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:push": "drizzle-kit push",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:integration": "node --experimental-strip-types --test --test-concurrency=1 tests/integration/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "1.6.23",
+    "@neondatabase/serverless": "1.1.0",
+    "@radix-ui/react-dialog": "1.1.20",
+    "@radix-ui/react-label": "2.1.12",
+    "@radix-ui/react-slot": "1.3.0",
+    "@tanstack/react-router": "1.170.18",
+    "@tanstack/react-start": "1.168.32",
+    "better-auth": "1.6.23",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "drizzle-orm": "0.45.2",
+    "isbot": "5.2.1",
+    "lucide-react": "1.25.0",
+    "nanoid": "6.0.0",
+    "nitro": "3.0.260610-beta",
+    "pg": "8.22.0",
+    "qrcode": "1.5.4",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "recharts": "3.9.2",
+    "sonner": "2.0.7",
+    "tailwind-merge": "3.6.0",
+    "ua-parser-js": "2.0.10"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.1.1",
+    "@types/pg": "8.20.0",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "drizzle-kit": "0.31.10",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "8.1.5"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
+  }
+}

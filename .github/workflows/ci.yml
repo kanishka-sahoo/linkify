@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # This name is the required status check in the "protect main" ruleset.
+    # Renaming it will block merges until the ruleset is updated.
+    name: Build, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: linkify
+          POSTGRES_PASSWORD: linkify
+          POSTGRES_DB: linkify_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U linkify"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://linkify:linkify@localhost:5432/linkify_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Build first: it generates src/routeTree.gen.ts (gitignored),
+      # which typecheck needs.
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # Runs the production build against the Postgres service above.
+      - name: Integration tests
+        run: npm run test:integration
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
