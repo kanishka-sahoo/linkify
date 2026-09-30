@@ -17,6 +17,7 @@ A single-user / small-team link shortener with analytics, built on TanStack Star
 - **QR codes** — authenticated, owner-scoped per-link PNG generation (`/api/qr/:code`)
 - **Auth** — email + password, TOTP two-factor, passkeys, database-backed throttling, session management, and security activity. First-run registration requires the deployment's setup secret; administrators must enable TOTP before managing data or users
 - **REST API** — expiring bearer keys with explicit read/write/stats scopes; keys are per-user and owner-scoped (admin keys see all); link creation is capped at 30/hour per user
+- **MCP server** — AI agents (Claude Code, Claude Desktop, Cursor, …) can create, edit, pause, and delete links and read analytics over the Model Context Protocol, using the same API keys and scopes
 
 ## Stack
 
@@ -111,6 +112,46 @@ curl -X POST https://your-domain/api/v1/links \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com", "code": "launch", "expiresAt": "2026-08-01T00:00:00Z"}'
 ```
+
+## MCP server
+
+`POST /api/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server (Streamable HTTP, stateless, JSON responses), so AI agents can manage links in plain language. It authenticates with the same API keys as the REST API: keys expire, their owners' account restrictions apply, and they see only their own links (admin keys see all). Each tool needs one of the key's scopes, and `tools/list` shows only the tools the key can call.
+
+| Tool | Scope | Description |
+|------|-------|-------------|
+| `list_links` | `links:read` | List links, newest first; filter by text, tag, or state (`active`, `paused`, `scheduled`, `expired`, `limit-reached`) |
+| `get_link` | `links:read` | One link by id or short code, with its short URL and current state |
+| `create_link` | `links:write` | Create a link (same fields as `POST /api/v1/links`; shares its 30/hour limit) |
+| `update_link` | `links:write` | Change only the given fields: pause/resume, rename, retag, reschedule, `password: null` to remove protection |
+| `delete_link` | `links:write` | Delete a link and its analytics |
+| `get_link_stats` | `stats:read` | 1–365 day analytics: daily series, uniques, bots, outcomes, country/referrer/browser/OS/device |
+| `get_click_log` | `stats:read` | Individual visits, newest first, paginated; privacy-mode links never include IP, city, or user agent |
+| `get_analytics_overview` | `stats:read` | 30-day totals and top links across everything the key can see |
+
+Writes are audit-logged as `mcp.link.created` / `updated` / `deleted`. Requests with a browser `Origin` from another site are rejected.
+
+Claude Code:
+
+```bash
+claude mcp add --transport http linkify https://your-domain/api/mcp \
+  --header "Authorization: Bearer lk_..."
+```
+
+Other clients that take a JSON config (Claude Desktop, Cursor, …):
+
+```json
+{
+  "mcpServers": {
+    "linkify": {
+      "type": "http",
+      "url": "https://your-domain/api/mcp",
+      "headers": { "Authorization": "Bearer lk_..." }
+    }
+  }
+}
+```
+
+Use a key with only the scopes the agent needs; for example, `links:read` + `stats:read` for a reporting agent that can't change links.
 
 ## Notes
 

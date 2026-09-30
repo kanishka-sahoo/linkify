@@ -244,3 +244,33 @@ export function client(app: App, key: string) {
 
 /** Distinct documentation-range IPs so per-IP visit limits don't interfere. */
 export const ip = (n: number) => `198.51.100.${(n % 250) + 1}`
+
+/** Minimal MCP client bound to one API key: raw POSTs plus a `tools/call` shortcut. */
+export function mcpClient(app: App, key: string) {
+  let nextId = 1
+  const post = async (body: unknown, headers: Record<string, string> = {}) => {
+    const res = await fetch(`${app.baseUrl}/api/mcp`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        ...headers,
+      },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    })
+    const text = await res.text()
+    return { status: res.status, headers: res.headers, body: text ? JSON.parse(text) : null }
+  }
+  const request = (method: string, params?: unknown) => post({ jsonrpc: '2.0', id: nextId++, method, params })
+  /** Calls a tool and returns its structured result, or `{ isError, message }` for tool errors. */
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const res = await request('tools/call', { name, arguments: args })
+    if (res.status !== 200 || res.body.error) throw new Error(`tools/call ${name}: ${res.status} ${JSON.stringify(res.body)}`)
+    const result = res.body.result
+    return result.isError
+      ? { isError: true as const, message: result.content[0].text as string }
+      : { isError: false as const, ...result.structuredContent }
+  }
+  return { post, request, call }
+}

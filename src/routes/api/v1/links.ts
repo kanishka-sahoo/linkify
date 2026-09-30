@@ -1,23 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { nanoid } from 'nanoid'
-import { desc, eq } from 'drizzle-orm'
+import { desc } from 'drizzle-orm'
 import { db } from '~/lib/db'
 import { links } from '~/lib/schema'
-import { resolveApiKey, hashPassword, hasApiScope } from '~/lib/keys'
-import { parseLinkInput, ownedByClause, safeLink } from '~/lib/links'
-import { hitLimit } from '~/lib/ratelimit'
-import { auditEvent } from '~/lib/audit'
+import { resolveApiKey, hasApiScope } from '~/lib/keys'
+import { ownedByClause, safeLink } from '~/lib/links'
+import { createLinkAs } from '~/lib/link-service'
 import { BodyTooLargeError, readJsonLimited } from '~/lib/http'
+import { json, linkErrorResponse } from '~/lib/api-response'
 
-function json(data: unknown, status = 200, headers: Record<string, string> = {}) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers },
-  })
-}
-
-const CREATE_LIMIT = 30
-const CREATE_WINDOW_MS = 60 * 60 * 1000
 const MAX_JSON_BYTES = 64 * 1024
 
 export const Route = createFileRoute('/api/v1/links')({
@@ -43,47 +33,21 @@ export const Route = createFileRoute('/api/v1/links')({
         if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
           return json({ error: 'Content-Type must be application/json' }, 415)
         }
-        let body: ReturnType<typeof parseLinkInput>
+        let input: unknown
         try {
-          body = parseLinkInput(await readJsonLimited(request, MAX_JSON_BYTES))
+          input = await readJsonLimited(request, MAX_JSON_BYTES)
         } catch (err) {
           if (err instanceof BodyTooLargeError) return json({ error: 'Request body too large' }, 413)
-          return json({ error: err instanceof Error ? err.message : 'Invalid JSON body' }, 400)
+          return json({ error: 'Invalid JSON body' }, 400)
         }
-        const code = body.code ?? nanoid(7)
-        const [existing] = await db.select({ id: links.id }).from(links).where(eq(links.code, code))
-        if (existing) return json({ error: `code "${code}" is already taken` }, 409)
-
-        const { allowed, retryAfterSec } = await hitLimit(`create:${key.userId}`, CREATE_LIMIT, CREATE_WINDOW_MS)
-        if (!allowed) {
-          return json({ error: 'Rate limit reached — link creation is capped at 30/hour' }, 429, {
-            'retry-after': String(retryAfterSec),
+        try {
+          const link = await createLinkAs({ id: key.userId, role: key.role }, input, {
+            via: 'api', keyId: key.id, headers: request.headers,
           })
+          return json(link, 201)
+        } catch (err) {
+          return linkErrorResponse(err)
         }
-
-        const [row] = await db
-          .insert(links)
-          .values({
-            id: nanoid(),
-            code,
-            url: body.url,
-            title: body.title ?? null,
-            tags: body.tags ?? [],
-            status: body.status ?? 'active',
-            startsAt: body.startsAt ? new Date(body.startsAt) : null,
-            expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
-            expiredRedirectUrl: body.expiredRedirectUrl ?? null,
-            maxClicks: body.maxClicks ?? null,
-            privacyEnabled: body.privacyEnabled ?? false,
-            passwordHash: body.password ? hashPassword(body.password) : null,
-            userId: key.userId,
-          })
-          .returning()
-        await auditEvent({
-          action: 'api.link.created', actorUserId: key.userId, targetType: 'link', targetId: row.id,
-          headers: request.headers, metadata: { keyId: key.id },
-        })
-        return json(safeLink(row), 201)
       },
     },
   },
