@@ -10,6 +10,13 @@ commits that shipped them; the dates below are the original commit dates.
 ## [Unreleased]
 
 ### Added
+- MCP server at `/api/mcp` so AI agents can list, search, create, edit, pause,
+  and delete links and read per-link stats, click logs, and account-wide
+  analytics. It uses the existing API keys: scopes decide which tools a key
+  sees and can call, ownership rules match the REST API, and writes are
+  audit-logged as `mcp.link.*`. Speaks MCP 2026-07-28 (stateless requests,
+  `server/discover`, mirrored headers, cache hints) and still accepts clients
+  on 2024-11-05 through 2025-11-25 (#1)
 - Admins can take over every link owned by another account, admin or user,
   from the Users page. Admins who leave are deactivated instead of deleted:
   they can't sign in or use API keys, and their links keep redirecting until
@@ -26,6 +33,9 @@ commits that shipped them; the dates below are the original commit dates.
   scopes, ownership, concurrent click caps and password lockouts, privacy mode (#12)
 
 ### Changed
+- REST link create/update/delete moved into a service shared with the MCP
+  server. `PATCH /api/v1/links/:id` now returns 404 instead of 409 when
+  renaming another user's link onto a taken code (#1)
 - Link analytics read per-day rollups (`click_daily`) maintained by the daily
   cleanup job instead of 8 scans of raw clicks per page view; 30-day to 1-year
   ranges load 2.3–3x faster on 1M clicks. Rolled-up counts outlive
