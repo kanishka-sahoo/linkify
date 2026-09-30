@@ -14,7 +14,9 @@ commits that shipped them; the dates below are the original commit dates.
   and delete links and read per-link stats, click logs, and account-wide
   analytics. It uses the existing API keys: scopes decide which tools a key
   sees and can call, ownership rules match the REST API, and writes are
-  audit-logged as `mcp.link.*` (#1)
+  audit-logged as `mcp.link.*`. Speaks MCP 2026-07-28 (stateless requests,
+  `server/discover`, mirrored headers, cache hints) and still accepts clients
+  on 2024-11-05 through 2025-11-25 (#1)
 - Admins can take over every link owned by another account, admin or user,
   from the Users page. Admins who leave are deactivated instead of deleted:
   they can't sign in or use API keys, and their links keep redirecting until

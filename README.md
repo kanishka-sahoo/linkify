@@ -115,7 +115,7 @@ curl -X POST https://your-domain/api/v1/links \
 
 ## MCP server
 
-`POST /api/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server (Streamable HTTP, stateless, JSON responses), so AI agents can manage links in plain language. It authenticates with the same API keys as the REST API: keys expire, their owners' account restrictions apply, and they see only their own links (admin keys see all). Each tool needs one of the key's scopes, and `tools/list` shows only the tools the key can call.
+`POST /api/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server (Streamable HTTP, JSON responses), so AI agents can manage links in plain language. It implements protocol **2026-07-28**: requests are stateless, each carrying its version and capabilities in `_meta` with the mirrored `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers, and `server/discover` reports the server's versions and capabilities. Clients still on 2024-11-05 through 2025-11-25 get the older `initialize` handshake on the same endpoint, so both kinds of client work. It authenticates with the same API keys as the REST API: keys expire, their owners' account restrictions apply, and they see only their own links (admin keys see all). Each tool needs one of the key's scopes, and `tools/list` shows only the tools the key can call.
 
 | Tool | Scope | Description |
 |------|-------|-------------|

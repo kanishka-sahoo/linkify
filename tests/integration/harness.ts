@@ -245,8 +245,14 @@ export function client(app: App, key: string) {
 /** Distinct documentation-range IPs so per-IP visit limits don't interfere. */
 export const ip = (n: number) => `198.51.100.${(n % 250) + 1}`
 
-/** Minimal MCP client bound to one API key: raw POSTs plus a `tools/call` shortcut. */
-export function mcpClient(app: App, key: string) {
+/**
+ * Minimal MCP client bound to one API key: raw POSTs plus request and
+ * `tools/call` shortcuts. `version` picks the protocol: 2026-07-28 sends the
+ * per-request `_meta` and mirrored headers; older versions send only the
+ * MCP-Protocol-Version header (none for 2025-03-26, as those clients did).
+ */
+export function mcpClient(app: App, key: string, version = '2026-07-28') {
+  const modern = version >= '2026-07-28'
   let nextId = 1
   const post = async (body: unknown, headers: Record<string, string> = {}) => {
     const res = await fetch(`${app.baseUrl}/api/mcp`, {
@@ -255,6 +261,7 @@ export function mcpClient(app: App, key: string) {
         authorization: `Bearer ${key}`,
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
+        ...(version > '2025-03-26' ? { 'mcp-protocol-version': version } : {}),
         ...headers,
       },
       body: typeof body === 'string' ? body : JSON.stringify(body),
@@ -262,7 +269,23 @@ export function mcpClient(app: App, key: string) {
     const text = await res.text()
     return { status: res.status, headers: res.headers, body: text ? JSON.parse(text) : null }
   }
-  const request = (method: string, params?: unknown) => post({ jsonrpc: '2.0', id: nextId++, method, params })
+  const request = (method: string, params: Record<string, unknown> = {}) => {
+    if (!modern) return post({ jsonrpc: '2.0', id: nextId++, method, params })
+    const name = method === 'tools/call' ? params.name : undefined
+    return post({
+      jsonrpc: '2.0',
+      id: nextId++,
+      method,
+      params: {
+        ...params,
+        _meta: {
+          'io.modelcontextprotocol/protocolVersion': version,
+          'io.modelcontextprotocol/clientInfo': { name: 'linkify-tests', version: '1' },
+          'io.modelcontextprotocol/clientCapabilities': {},
+        },
+      },
+    }, { 'mcp-method': method, ...(typeof name === 'string' ? { 'mcp-name': name } : {}) })
+  }
   /** Calls a tool and returns its structured result, or `{ isError, message }` for tool errors. */
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const res = await request('tools/call', { name, arguments: args })

@@ -20,24 +20,115 @@ describe('MCP server', { skip }, () => {
   })
   beforeEach(resetDb)
 
-  describe('transport', () => {
-    test('initialize negotiates a version and the handshake completes', async () => {
+  describe('transport: protocol 2026-07-28', () => {
+    test('server/discover needs no handshake and describes the server', async () => {
       const mcp = mcpClient(app, await createApiKey(await createUser()))
+      const res = await mcp.request('server/discover')
+      assert.equal(res.status, 200)
+      assert.equal(res.headers.get('content-type'), 'application/json')
+      const result = res.body.result
+      assert.equal(result.resultType, 'complete')
+      assert.equal(result.supportedVersions[0], '2026-07-28')
+      assert.ok(result.supportedVersions.includes('2025-11-25'))
+      assert.deepEqual(result.capabilities, { tools: {} })
+      assert.match(result.instructions, /URL shortener/)
+      assert.equal(result.cacheScope, 'public')
+      assert.ok(result.ttlMs > 0)
+      assert.deepEqual(result._meta['io.modelcontextprotocol/serverInfo'], { name: 'linkify', version: '1.0.0' })
+    })
+
+    test('every request is independent: tools work without any prior request', async () => {
+      const mcp = mcpClient(app, await createApiKey(await createUser()))
+      const list = await mcp.request('tools/list')
+      assert.equal(list.status, 200)
+      assert.equal(list.body.result.resultType, 'complete')
+      assert.equal(list.body.result.cacheScope, 'private')
+      assert.equal(list.headers.get('mcp-session-id'), null, 'no sessions are minted')
+      const created = await mcp.request('tools/call', { name: 'create_link', arguments: { url: 'https://example.com', code: 'direct' } })
+      assert.equal(created.status, 200)
+      assert.equal(created.body.result.resultType, 'complete')
+      assert.equal(created.body.result.structuredContent.code, 'direct')
+    })
+
+    test('missing _meta, mismatched headers, and unsupported versions are rejected with 400', async () => {
+      const mcp = mcpClient(app, await createApiKey(await createUser()))
+      const base = { 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/list' }
+      const noMeta = await mcp.post({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }, base)
+      assert.equal(noMeta.status, 400)
+      assert.equal(noMeta.body.error.code, -32602)
+
+      const meta = {
+        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+        'io.modelcontextprotocol/clientCapabilities': {},
+      }
+      const call = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_links', arguments: {}, _meta: meta } }
+      for (const headers of [
+        { 'mcp-protocol-version': '2026-07-28' },
+        { ...base, 'mcp-method': 'tools/call' },
+        { ...base, 'mcp-method': 'tools/call', 'mcp-name': 'delete_link' },
+      ]) {
+        const res = await mcp.post(call, headers)
+        assert.equal(res.status, 400, JSON.stringify(headers))
+        assert.equal(res.body.error.code, -32020)
+      }
+      assert.equal(
+        (await mcp.post(call, { ...base, 'mcp-method': 'tools/call', 'mcp-name': `=?base64?${btoa('list_links')}?=` })).status,
+        200,
+      )
+
+      const old = await mcp.post({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: { _meta: meta } }, { ...base, 'mcp-protocol-version': '1999-01-01' })
+      assert.equal(old.status, 400)
+      assert.equal(old.body.error.code, -32022)
+      assert.equal(old.body.error.data.requested, '1999-01-01')
+      assert.equal(old.body.error.data.supported[0], '2026-07-28')
+    })
+
+    test('removed methods and unknown methods are 404', async () => {
+      const mcp = mcpClient(app, await createApiKey(await createUser()))
+      for (const method of ['initialize', 'ping', 'resources/list', 'subscriptions/listen']) {
+        const res = await mcp.request(method)
+        assert.equal(res.status, 404, method)
+        assert.equal(res.body.error.code, -32601)
+      }
+    })
+  })
+
+  describe('transport: handshake-era protocols', () => {
+    test('initialize negotiates a version and the handshake completes', async () => {
+      const mcp = mcpClient(app, await createApiKey(await createUser()), '2025-06-18')
       const init = await mcp.request('initialize', {
         protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' },
       })
       assert.equal(init.status, 200)
-      assert.equal(init.headers.get('content-type'), 'application/json')
       assert.equal(init.body.result.protocolVersion, '2025-06-18')
       assert.deepEqual(init.body.result.serverInfo, { name: 'linkify', version: '1.0.0' })
       assert.ok(init.body.result.capabilities.tools)
+      assert.equal('resultType' in init.body.result, false, 'legacy results keep their old shape')
 
-      const initialized = await mcp.post({ jsonrpc: '2.0', method: 'notifications/initialized' }, { 'mcp-protocol-version': '2025-06-18' })
+      const initialized = await mcp.post({ jsonrpc: '2.0', method: 'notifications/initialized' })
       assert.equal(initialized.status, 202)
       assert.equal(initialized.body, null)
-      assert.equal((await mcp.request('ping')).body.result && true, true)
+      assert.deepEqual((await mcp.request('ping')).body.result, {})
+      const created = await mcp.call('create_link', { url: 'https://example.com', code: 'legacy' })
+      assert.equal((created as Record<string, unknown>).code, 'legacy')
     })
 
+    test('clients without a version header are served as 2025-03-26, batches included', async () => {
+      const mcp = mcpClient(app, await createApiKey(await createUser()), '2025-03-26')
+      const res = await mcp.post([
+        { jsonrpc: '2.0', id: 'a', method: 'ping' },
+        { jsonrpc: '2.0', method: 'notifications/initialized' },
+        { jsonrpc: '2.0', id: 'b', method: 'tools/list' },
+      ])
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.body.map((r: { id: string }) => r.id), ['a', 'b'])
+      const unknown = await mcp.request('resources/list')
+      assert.equal(unknown.status, 200)
+      assert.equal(unknown.body.error.code, -32601)
+    })
+  })
+
+  describe('transport: HTTP', () => {
     test('missing, unknown, expired, and restricted keys get 401', async () => {
       const statuses = async (key: string) => (await mcpClient(app, key).request('tools/list')).status
       const noAuth = await fetch(`${app.baseUrl}/api/mcp`, {
@@ -55,7 +146,7 @@ describe('MCP server', { skip }, () => {
       assert.equal(await statuses(deactivatedKey), 401)
     })
 
-    test('GET and DELETE are not supported by this stateless server', async () => {
+    test('GET and DELETE are 405: no standalone stream and no sessions', async () => {
       const key = await createApiKey(await createUser())
       for (const method of ['GET', 'DELETE']) {
         const res = await fetch(`${app.baseUrl}/api/mcp`, { method, headers: { authorization: `Bearer ${key}` } })
@@ -64,34 +155,22 @@ describe('MCP server', { skip }, () => {
       }
     })
 
-    test('malformed bodies, wrong content types, versions, and origins are rejected', async () => {
+    test('malformed bodies, wrong content types, oversized bodies, and foreign origins are rejected', async () => {
       const mcp = mcpClient(app, await createApiKey(await createUser()))
       const parse = await mcp.post('{not json')
       assert.equal(parse.status, 400)
       assert.equal(parse.body.error.code, -32700)
-
       assert.equal((await mcp.post({ jsonrpc: '2.0', id: 1, method: 'ping' }, { 'content-type': 'text/plain' })).status, 415)
-      const version = await mcp.post({ jsonrpc: '2.0', id: 1, method: 'ping' }, { 'mcp-protocol-version': '1999-01-01' })
-      assert.equal(version.status, 400)
-      assert.equal((await mcp.post({ jsonrpc: '2.0', id: 1, method: 'ping' }, { origin: 'https://evil.example' })).status, 403)
-      assert.equal((await mcp.post({ jsonrpc: '2.0', id: 1, method: 'ping' }, { origin: app.baseUrl })).status, 200)
-
-      const tooBig = await mcp.post({ jsonrpc: '2.0', id: 1, method: 'ping', params: { pad: 'x'.repeat(70 * 1024) } })
+      assert.equal((await mcp.request('server/discover')).status, 200)
+      const discover = { 'mcp-method': 'server/discover' }
+      const body = {
+        jsonrpc: '2.0', id: 1, method: 'server/discover',
+        params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} } },
+      }
+      assert.equal((await mcp.post(body, { ...discover, origin: 'https://evil.example' })).status, 403)
+      assert.equal((await mcp.post(body, { ...discover, origin: app.baseUrl })).status, 200)
+      const tooBig = await mcp.post({ ...body, params: { ...body.params, pad: 'x'.repeat(70 * 1024) } }, discover)
       assert.equal(tooBig.status, 413)
-
-      const unknown = await mcp.request('resources/list')
-      assert.equal(unknown.body.error.code, -32601)
-    })
-
-    test('batches return one response per request', async () => {
-      const mcp = mcpClient(app, await createApiKey(await createUser()))
-      const res = await mcp.post([
-        { jsonrpc: '2.0', id: 'a', method: 'ping' },
-        { jsonrpc: '2.0', method: 'notifications/initialized' },
-        { jsonrpc: '2.0', id: 'b', method: 'tools/list' },
-      ])
-      assert.equal(res.status, 200)
-      assert.deepEqual(res.body.map((r: { id: string }) => r.id), ['a', 'b'])
     })
   })
 
