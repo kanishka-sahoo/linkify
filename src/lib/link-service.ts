@@ -10,6 +10,9 @@ import { hashPassword } from './keys'
 import { hitLimit } from './ratelimit'
 import { auditEvent } from './audit'
 import { parseLinkInput, safeLink } from './link-domain'
+import { accessibleById, ownedByClause } from './link-access'
+
+export { accessibleById, ownedByClause } from './link-access'
 
 export interface Actor {
   id: string
@@ -28,21 +31,6 @@ export class LinkError extends Error {
   constructor(message: string, readonly status: number, readonly retryAfterSec?: number) {
     super(message)
   }
-}
-
-/**
- * WHERE clause restricting links to those the actor may see. Admins see
- * everything; everyone else only sees their own links.
- */
-export function ownedByClause(actor: Actor) {
-  if (actor.role === 'admin') return undefined
-  return eq(links.userId, actor.id)
-}
-
-/** WHERE clause matching this id only if the actor may access it. */
-export function accessibleById(id: string, actor: Actor) {
-  const owned = ownedByClause(actor)
-  return owned ? and(eq(links.id, id), owned) : eq(links.id, id)
 }
 
 const CREATE_LIMIT = 30

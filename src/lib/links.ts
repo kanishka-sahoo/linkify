@@ -15,7 +15,8 @@ import {
   normalizeTags, parseLinkInput, safeLink, validateCode,
 } from './link-domain'
 import { getClickStats } from './stats'
-import { ownedByClause, overviewFor } from './link-service'
+import { ownedByClause } from './link-access'
+import { overviewFor } from './link-service'
 import { parseClickLogCursor, parseClickLogFilter, queryClickLog } from './click-log'
 
 export {
@@ -23,7 +24,7 @@ export {
   safeLink, validateCode, validateUrl,
 } from './link-domain'
 export type { LinkInput, LinkStatus, SafeLink } from './link-domain'
-export { ownedByClause } from './link-service'
+export { ownedByClause } from './link-access'
 
 async function requireUser() {
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
