@@ -9,6 +9,17 @@ commits that shipped them; the dates below are the original commit dates.
 
 ## [Unreleased]
 
+### Changed
+- Redesigned every page in the dashboard's style: the home, sign-in, setup,
+  and 404 pages share a branded frame; the analytics page has a new header,
+  date-range control, stat strip, and panels; **Settings** is grouped into
+  Account, Security, Developers, and Activity; **Users** has a summary strip,
+  role and 2FA pills, and a per-user actions menu
+- Opening a link now opens one panel where members and admins see and edit
+  it, replacing the separate details panel and edit dialog. New links and
+  duplicates use the same panel, and the analytics page has an **Edit link**
+  button. Guests still get the read-only details panel
+
 ### Added
 - Link details panel: open any link on the dashboard to see its status,
   schedule, expiry, click limit and usage, fallback URL, password and privacy

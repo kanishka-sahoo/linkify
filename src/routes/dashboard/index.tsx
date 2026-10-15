@@ -16,11 +16,13 @@ import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Checkbox } from '~/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '~/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
-import { LinkFormDialog } from '~/components/link-form'
+import { Select } from '~/components/ui/select'
+import { PageHeader, Stat, StatGrid } from '~/components/page-header'
+import { LinkEditorSheet } from '~/components/link-form'
+import { LinkQrDialog } from '~/components/link-qr-dialog'
 import { LinkImportDialog } from '~/components/link-import-dialog'
 import { BulkEditLinksDialog } from '~/components/bulk-edit-links-dialog'
 import { LinkDetailsSheet, type LinkOwner } from '~/components/link-details'
@@ -67,7 +69,8 @@ const plural = (n: number, word: string) => `${n.toLocaleString('en-US')} ${word
 
 /** What a row can do; `undefined` handlers are hidden from read-only viewers. */
 interface RowActions {
-  details: (link: LinkRow) => void
+  /** Opens the link: the editor for editors, the read-only details panel for guests. */
+  open: (link: LinkRow) => void
   qr: (link: LinkRow) => void
   copy: (link: LinkRow) => void
   filterByTag: (tag: string) => void
@@ -89,7 +92,7 @@ function LinksPage() {
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortAsc, setSortAsc] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [formOpen, setFormOpen] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<LinkRow | null>(null)
   const [duplicating, setDuplicating] = useState(false)
   const [qrFor, setQrFor] = useState<string | null>(null)
@@ -196,22 +199,22 @@ function LinksPage() {
     }
   }
 
-  function openForm(link: LinkRow | null, duplicate = false) {
-    setDetailsId(null)
+  function openEditor(link: LinkRow | null, duplicate = false) {
     setEditing(link)
     setDuplicating(duplicate)
-    setFormOpen(true)
+    setEditorOpen(true)
   }
 
   async function onDelete(link: LinkRow) {
     if (!confirm(`Delete /${link.code}? This also deletes its analytics.`)) return
     await deleteLink({ data: { id: link.id } })
     toast.success('Link deleted')
+    setEditorOpen(false)
     refresh()
   }
 
   const actions: RowActions = {
-    details: (link) => setDetailsId(link.id),
+    open: readOnly ? (link) => setDetailsId(link.id) : (link) => openEditor(link),
     qr: (link) => setQrFor(link.code),
     copy: async (link) => {
       await navigator.clipboard.writeText(shortUrl(link.code))
@@ -219,8 +222,8 @@ function LinksPage() {
     },
     filterByTag: toggleTag,
     ...(!readOnly && {
-      edit: (link: LinkRow) => openForm(link),
-      duplicate: (link: LinkRow) => openForm(link, true),
+      edit: (link: LinkRow) => openEditor(link),
+      duplicate: (link: LinkRow) => openEditor(link, true),
       remove: onDelete,
     }),
   }
@@ -276,34 +279,30 @@ function LinksPage() {
 
   return (
     <div className={cn('grid grid-cols-1 gap-6', selected.size > 0 && 'pb-24')}>
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="grid gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Links</h1>
-          <p className="text-sm text-muted-foreground">
-            {readOnly
-              ? 'A read-only view of the links shared with you. Open any link to see how it’s configured.'
-              : 'Create, share, and track your short links.'}
-          </p>
-        </div>
-        {!readOnly && (
-          <div className="flex gap-2">
+      <PageHeader
+        title="Links"
+        description={readOnly
+          ? 'A read-only view of the links shared with you. Open any link to see how it’s configured.'
+          : 'Create, share, and track your short links. Open a link to edit it.'}
+        actions={!readOnly && (
+          <>
             <Button variant="outline" className="flex-1 bg-background sm:flex-none" onClick={() => setImportOpen(true)}>
               <Upload /> Import
             </Button>
-            <Button className="flex-1 sm:flex-none" onClick={() => openForm(null)}>
+            <Button className="flex-1 sm:flex-none" onClick={() => openEditor(null)}>
               <Plus /> New link
             </Button>
-          </div>
+          </>
         )}
-      </header>
+      />
 
-      <section aria-label="Overview" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border shadow-sm sm:grid-cols-5">
+      <StatGrid label="Overview" className="sm:grid-cols-5">
         <Stat className="col-span-2 sm:col-span-1" label="Links" value={overview.linkCount} hint={`${activeCount.toLocaleString('en-US')} active`} />
         <Stat label="Clicks" value={overview.clicks30d} hint="Last 30 days" />
         <Stat label="Unique humans" value={overview.unique30d} hint="Last 30 days" />
         <Stat label="Humans" value={humans30d} hint={shareOfClicks(humans30d)} />
         <Stat label="Bots" value={overview.bots30d} hint={shareOfClicks(overview.bots30d)} />
-      </section>
+      </StatGrid>
 
       <section aria-label="Links" className="grid grid-cols-1 gap-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -319,14 +318,14 @@ function LinksPage() {
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
-            <select
+            <Select
               aria-label="Sort links"
-              className="h-9 rounded-md border bg-background px-2 text-sm md:hidden"
+              className="w-40 md:hidden"
               value={sortKey}
               onChange={(e) => toggleSort(e.target.value as SortKey)}
             >
               {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            </Select>
           </div>
           <StatusTabs value={status} counts={statusCounts} onChange={setStatus} />
         </div>
@@ -365,7 +364,7 @@ function LinksPage() {
               filtered={links.length > 0}
               readOnly={readOnly}
               onClear={clearFilters}
-              onCreate={() => openForm(null)}
+              onCreate={() => openEditor(null)}
             />
           ) : (
             <>
@@ -409,14 +408,25 @@ function LinksPage() {
         />
       )}
 
-      <LinkDetailsSheet
-        link={detailsLink}
-        ownerOf={ownerOf}
-        onClose={() => setDetailsId(null)}
-        onShowQr={actions.qr}
-        onEdit={actions.edit}
-      />
-      <LinkFormDialog open={formOpen} onOpenChange={setFormOpen} link={editing} duplicate={duplicating} onSaved={refresh} />
+      {readOnly ? (
+        <LinkDetailsSheet
+          link={detailsLink}
+          ownerOf={ownerOf}
+          onClose={() => setDetailsId(null)}
+          onShowQr={actions.qr}
+        />
+      ) : (
+        <LinkEditorSheet
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          link={editing}
+          duplicate={duplicating}
+          owner={editing && isAdmin ? ownerOf(editing) : undefined}
+          onSaved={refresh}
+          onShowQr={actions.qr}
+          onDelete={onDelete}
+        />
+      )}
       <LinkImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
       <BulkEditLinksDialog
         open={bulkEditOpen}
@@ -426,17 +436,7 @@ function LinksPage() {
         isAdmin={isAdmin}
         onSaved={refresh}
       />
-      <QrDialog code={qrFor} onClose={() => setQrFor(null)} />
-    </div>
-  )
-}
-
-function Stat({ label, value, hint, className }: { label: string; value: number; hint: string; className?: string }) {
-  return (
-    <div className={cn('grid gap-1 bg-card p-4 sm:p-5', className)}>
-      <div className="text-sm font-medium text-muted-foreground">{label}</div>
-      <div className="text-2xl font-semibold tracking-tight tabular-nums">{value.toLocaleString('en-US')}</div>
-      <div className="text-xs text-muted-foreground">{hint}</div>
+      <LinkQrDialog code={qrFor} onClose={() => setQrFor(null)} />
     </div>
   )
 }
@@ -594,9 +594,9 @@ function LinkIdentity({ link, actions }: { link: LinkRow; actions: RowActions })
       <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
-          onClick={() => actions.details(link)}
+          onClick={() => actions.open(link)}
           className="cursor-pointer truncate rounded-sm font-mono text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          title="View link details"
+          title={actions.edit ? 'Open and edit this link' : 'View link details'}
         >
           /{link.code}
         </button>
@@ -691,16 +691,17 @@ function RowMenu({ link, actions }: { link: LinkRow; actions: RowActions }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem onSelect={() => actions.details(link)}><Info /> View details</DropdownMenuItem>
+        {actions.edit
+          ? <DropdownMenuItem onSelect={() => actions.edit!(link)}><Pencil /> Edit link</DropdownMenuItem>
+          : <DropdownMenuItem onSelect={() => actions.open(link)}><Info /> View details</DropdownMenuItem>}
         <DropdownMenuItem asChild>
           <Link to="/dashboard/links/$code" params={{ code: link.code }}><BarChart3 /> Analytics</Link>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => actions.copy(link)}><Copy /> Copy short link</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => actions.qr(link)}><QrCode /> QR code</DropdownMenuItem>
-        {actions.edit && actions.duplicate && actions.remove && (
+        {actions.duplicate && actions.remove && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => actions.edit!(link)}><Pencil /> Edit</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.duplicate!(link)}><CopyPlus /> Duplicate</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem destructive onSelect={() => actions.remove!(link)}><Trash2 /> Delete</DropdownMenuItem>
@@ -810,26 +811,5 @@ function BulkBar({ count, readOnly, onExport, onExpire, onEdit, onDelete, onClea
         </Button>
       </div>
     </div>
-  )
-}
-
-function QrDialog({ code, onClose }: { code: string | null; onClose: () => void }) {
-  return (
-    <Dialog open={Boolean(code)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xs">
-        <DialogHeader>
-          <DialogTitle className="font-mono">/{code}</DialogTitle>
-          <DialogDescription>Scan to open this short link.</DialogDescription>
-        </DialogHeader>
-        {code && (
-          <div className="grid justify-items-center gap-4">
-            <img src={`/api/qr/${code}`} alt={`QR code for /${code}`} className="rounded-lg border bg-white p-2" width={256} height={256} />
-            <Button variant="outline" className="w-full" asChild>
-              <a href={`/api/qr/${code}`} download={`${code}.png`}><Download /> Download PNG</a>
-            </Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   )
 }

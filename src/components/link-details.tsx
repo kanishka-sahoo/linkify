@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { BarChart3, Copy, ExternalLink, Pencil, QrCode } from 'lucide-react'
+import { BarChart3, Copy, ExternalLink, QrCode } from 'lucide-react'
 import type { SafeLink } from '~/lib/link-domain'
 import { Button } from '~/components/ui/button'
 import {
@@ -115,13 +115,12 @@ export function LinkSettings({ link, owner, className }: { link: SafeLink; owner
   )
 }
 
-export function LinkDetailsSheet({ link, ownerOf, onClose, onShowQr, onEdit }: {
+/** The read-only panel guests get when they open a link; editors get `LinkEditorSheet`. */
+export function LinkDetailsSheet({ link, ownerOf, onClose, onShowQr }: {
   link: SafeLink | null
   ownerOf: (link: SafeLink) => LinkOwner | undefined
   onClose: () => void
   onShowQr: (link: SafeLink) => void
-  /** Omitted for read-only viewers. */
-  onEdit?: (link: SafeLink) => void
 }) {
   // Keep showing the last link while the sheet animates closed.
   const [lastLink, setLastLink] = useState(link)
@@ -134,7 +133,10 @@ export function LinkDetailsSheet({ link, ownerOf, onClose, onShowQr, onEdit }: {
         {shown && (
           <>
             <SheetHeader>
-              <SheetTitle className="truncate font-mono">/{shown.code}</SheetTitle>
+              <div className="flex min-w-0 items-center gap-2">
+                <SheetTitle className="truncate font-mono">/{shown.code}</SheetTitle>
+                <StatusBadge state={linkState(shown)} />
+              </div>
               <SheetDescription asChild>
                 <div className="grid gap-2">
                   {shown.title && <span className="text-foreground">{shown.title}</span>}
@@ -166,11 +168,6 @@ export function LinkDetailsSheet({ link, ownerOf, onClose, onShowQr, onEdit }: {
               <LinkSettings link={shown} owner={ownerOf(shown)} />
             </SheetBody>
             <SheetFooter>
-              {onEdit && (
-                <Button variant="outline" onClick={() => onEdit(shown)}>
-                  <Pencil /> Edit
-                </Button>
-              )}
               <Button asChild>
                 <Link to="/dashboard/links/$code" params={{ code: shown.code }}>
                   <BarChart3 /> View analytics

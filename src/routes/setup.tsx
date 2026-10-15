@@ -6,7 +6,7 @@ import { authClient } from '~/lib/auth-client'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
+import { AuthCard, AuthShell } from '~/components/auth-shell'
 
 export const Route = createFileRoute('/setup')({
   beforeLoad: async () => {
@@ -44,54 +44,56 @@ function SetupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Welcome to Linkify</CardTitle>
-          <CardDescription>Create the admin account. This is a one-time setup.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="setup-secret">One-time setup secret</Label>
-              <Input
-                id="setup-secret"
-                type="password"
-                value={setupSecret}
-                onChange={(e) => setSetupSecret(e.target.value)}
-                autoComplete="off"
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Enter the SETUP_SECRET configured in the deployment environment.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                minLength={12}
-                maxLength={128}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creating…' : 'Create account'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <AuthShell>
+      <AuthCard
+        title="Welcome to Linkify"
+        description="Create the first administrator account. This is a one-time setup."
+        footer="You can invite members and guests from the dashboard afterwards."
+      >
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <div className="grid gap-2 rounded-lg border bg-muted/30 p-3">
+            <Label htmlFor="setup-secret">Setup secret</Label>
+            <Input
+              id="setup-secret"
+              type="password"
+              value={setupSecret}
+              onChange={(e) => setSetupSecret(e.target.value)}
+              autoComplete="off"
+              autoFocus
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              The <code className="font-mono">SETUP_SECRET</code> from the deployment environment.
+            </p>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="name">Name</Label>
+            <Input id="name" className="h-10" value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" autoComplete="email" className="h-10" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="new-password"
+              minLength={12}
+              maxLength={128}
+              className="h-10"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <p className="text-xs text-muted-foreground">At least 12 characters.</p>
+          </div>
+          <Button type="submit" className="h-10" disabled={loading}>
+            {loading ? 'Creating…' : 'Create account'}
+          </Button>
+        </form>
+      </AuthCard>
+    </AuthShell>
   )
 }

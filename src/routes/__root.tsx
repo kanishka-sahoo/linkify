@@ -8,6 +8,7 @@ import { Toaster } from 'sonner'
 import type { ReactNode } from 'react'
 import appCss from '~/styles.css?url'
 import { themeInitScript } from '~/components/theme-toggle'
+import { AuthShell } from '~/components/auth-shell'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -28,10 +29,15 @@ export const Route = createRootRoute({
   }),
   component: RootComponent,
   notFoundComponent: () => (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-2">
-      <h1 className="text-4xl font-bold">404</h1>
-      <p className="text-muted-foreground">This link doesn't exist.</p>
-    </div>
+    <AuthShell>
+      <div className="grid justify-items-center gap-3 text-center motion-safe:animate-rise-in">
+        <span className="font-mono text-sm font-medium text-muted-foreground">404</span>
+        <h1 className="text-2xl font-semibold tracking-tight">This link doesn’t exist</h1>
+        <p className="max-w-sm text-pretty text-muted-foreground">
+          Check the address for typos. The link may also have been deleted or renamed.
+        </p>
+      </div>
+    </AuthShell>
   ),
 })
 

@@ -95,6 +95,7 @@
   --animate-sheet-out: sheet-out 180ms ease-in;
   --animate-pop-in: pop-in 120ms ease-out;
   --animate-rise-in: rise-in 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-dialog-in: dialog-in 180ms cubic-bezier(0.32, 0.72, 0, 1);
 
   @keyframes fade-in { from { opacity: 0; } }
   @keyframes fade-out { to { opacity: 0; } }
@@ -102,6 +103,7 @@
   @keyframes sheet-out { to { transform: translateX(100%); } }
   @keyframes pop-in { from { opacity: 0; transform: scale(0.96) translateY(-2px); } }
   @keyframes rise-in { from { opacity: 0; transform: translateY(12px); } }
+  @keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); } }
 }
 
 /* Horizontal scrollers (filter tabs, mobile nav) that shouldn't show a scrollbar. */
@@ -110,6 +112,12 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* Faint dot grid behind the signed-out pages. */
+@utility bg-dots {
+  background-image: radial-gradient(color-mix(in oklch, var(--color-foreground) 9%, transparent) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 @layer base {

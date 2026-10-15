@@ -1,7 +1,11 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Activity, AtSign, Copy, Fingerprint, KeyRound, Laptop, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import {
+  Activity, AlertTriangle, AtSign, Check, Copy, Eye, Fingerprint, KeyRound, Laptop, Plus, ShieldCheck, Trash2,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import QRCode from 'qrcode'
 import { authClient } from '~/lib/auth-client'
 import { createApiKey, deleteApiKey } from '~/lib/links'
@@ -10,11 +14,11 @@ import { API_SCOPES, type ApiScope } from '~/lib/api-scopes'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
-import { Badge } from '~/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '~/components/ui/table'
+import { Checkbox } from '~/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { LocalTime } from '~/components/local-time'
+import { PageHeader } from '~/components/page-header'
+import { cn } from '~/lib/utils'
 
 export const Route = createFileRoute('/dashboard/settings')({
   loader: () => getSettingsData(),
@@ -36,38 +40,128 @@ function SettingsPage() {
 
   if (guest) {
     return (
-      <div className="grid max-w-3xl gap-6">
-        <h1 className="text-xl font-semibold">Settings</h1>
-        <div className="rounded-lg border p-4 text-sm text-muted-foreground">
-          This is a read-only guest account. Its password, security settings, and API access are managed by an administrator.
+      <div className="mx-auto grid max-w-3xl gap-6">
+        <PageHeader title="Settings" />
+        <div className="flex items-start gap-4 rounded-xl border bg-card p-5 shadow-sm">
+          <IconTile icon={Eye} />
+          <div className="grid gap-1">
+            <h2 className="font-semibold tracking-tight">Read-only guest account</h2>
+            <p className="text-sm text-muted-foreground">
+              Its password, security settings, and API access are managed by an administrator.
+            </p>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="grid max-w-3xl gap-6">
-      <h1 className="text-xl font-semibold">Settings</h1>
-      {mustChangePassword && (
-        <div className="rounded-lg border border-orange-500/40 bg-orange-500/10 p-4 text-sm">
-          Change the temporary password before using the rest of the application.
+    <div className="mx-auto grid max-w-3xl gap-8">
+      <PageHeader title="Settings" description="Manage how you sign in, your sessions, and API access." />
+      {(mustChangePassword || twoFactorRequired) && (
+        <div role="alert" className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-900 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div className="grid gap-1">
+            <p className="font-medium">Finish securing your account to continue</p>
+            {mustChangePassword && <p>Change the temporary password before using the rest of the application.</p>}
+            {twoFactorRequired && (
+              <p>Admin accounts must turn on two-factor authentication. Set it up below with an authenticator app.</p>
+            )}
+          </div>
         </div>
       )}
-      {twoFactorRequired && (
-        <div className="rounded-lg border border-orange-500/40 bg-orange-500/10 p-4 text-sm">
-          Admin accounts must turn on two-factor authentication before using the rest of the application.
-          Set it up below with an authenticator app.
-        </div>
-      )}
-      <UsernameCard />
-      <PasswordCard onChanged={() => completed('password')} />
-      <TwoFactorCard onEnabled={() => completed('twoFactor')} />
-      <PasskeysCard />
-      <SessionsCard />
-      <ApiKeysCard />
-      <SecurityActivityCard />
+      <SettingsGroup title="Account">
+        <UsernameCard />
+        <PasswordCard onChanged={() => completed('password')} />
+      </SettingsGroup>
+      <SettingsGroup title="Security">
+        <TwoFactorCard onEnabled={() => completed('twoFactor')} />
+        <PasskeysCard />
+        <SessionsCard />
+      </SettingsGroup>
+      <SettingsGroup title="Developers">
+        <ApiKeysCard />
+      </SettingsGroup>
+      <SettingsGroup title="Activity">
+        <SecurityActivityCard />
+      </SettingsGroup>
     </div>
   )
+}
+
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="grid gap-3">
+      <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</h2>
+      <div className="grid gap-4">{children}</div>
+    </section>
+  )
+}
+
+function IconTile({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-muted/50 text-muted-foreground">
+      <Icon className="size-4" />
+    </span>
+  )
+}
+
+/** A settings panel: icon, title, and summary on top; an optional status or action on the right. */
+function SettingsCard({ icon, title, description, aside, footer, flush, children }: {
+  icon: LucideIcon
+  title: string
+  description: ReactNode
+  aside?: ReactNode
+  footer?: ReactNode
+  /** Let lists run edge to edge instead of inside the card's padding. */
+  flush?: boolean
+  children?: ReactNode
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+      <div className="flex items-start gap-4 p-5">
+        <IconTile icon={icon} />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <h3 className="font-semibold tracking-tight">{title}</h3>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        {aside && <div className="shrink-0">{aside}</div>}
+      </div>
+      {children && <div className={cn(flush ? 'border-t' : 'px-5 pb-5 sm:pl-[4.5rem]')}>{children}</div>}
+      {footer && <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-5 py-3">{footer}</div>}
+    </section>
+  )
+}
+
+function StatusPill({ on, children }: { on: boolean; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+        on
+          ? 'bg-emerald-500/10 text-emerald-700 ring-emerald-600/20 dark:text-emerald-400 dark:ring-emerald-400/20'
+          : 'bg-muted text-muted-foreground ring-border',
+      )}
+    >
+      <span className={cn('size-1.5 rounded-full', on ? 'bg-emerald-500' : 'bg-muted-foreground/50')} aria-hidden />
+      {children}
+    </span>
+  )
+}
+
+function ListEmpty({ children }: { children: ReactNode }) {
+  return <p className="px-5 py-6 text-center text-sm text-muted-foreground">{children}</p>
+}
+
+/** "Chrome on macOS" from a user-agent string; good enough to tell your own devices apart. */
+function describeAgent(ua: string | null) {
+  if (!ua) return 'Unknown device'
+  const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : null
+  const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS'
+    : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : null
+  if (browser && os) return `${browser} on ${os}`
+  return browser ?? os ?? ua.slice(0, 40)
 }
 
 function UsernameCard() {
@@ -87,24 +181,22 @@ function UsernameCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><AtSign className="h-5 w-5" /> Username</CardTitle>
-        <CardDescription>Sign in with this instead of your email. Letters, numbers, underscores and dots.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={submit} className="flex max-w-sm gap-2">
-          <Input
-            autoComplete="username" autoCapitalize="none" spellCheck={false}
-            minLength={3} maxLength={30} pattern="[A-Za-z0-9_.]+" placeholder="Username"
-            value={username} onChange={(e) => setUsername(e.target.value)} required
-          />
-          <Button type="submit" disabled={loading || username.trim() === (current ?? '')}>
-            {loading ? 'Saving…' : 'Save'}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <SettingsCard
+      icon={AtSign}
+      title="Username"
+      description="Sign in with this instead of your email. Letters, numbers, underscores and dots."
+    >
+      <form onSubmit={submit} className="flex max-w-sm gap-2">
+        <Input
+          autoComplete="username" autoCapitalize="none" spellCheck={false}
+          minLength={3} maxLength={30} pattern="[A-Za-z0-9_.]+" placeholder="Username"
+          value={username} onChange={(e) => setUsername(e.target.value)} required
+        />
+        <Button type="submit" disabled={loading || username.trim() === (current ?? '')}>
+          {loading ? 'Saving…' : 'Save'}
+        </Button>
+      </form>
+    </SettingsCard>
   )
 }
 
@@ -130,19 +222,23 @@ function PasswordCard({ onChanged }: { onChanged: () => void }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5" /> Password</CardTitle>
-        <CardDescription>Use at least 12 characters. Changing it signs out every other session.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={submit} className="grid max-w-sm gap-3">
-          <Input type="password" autoComplete="current-password" maxLength={128} placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
-          <Input type="password" autoComplete="new-password" minLength={12} maxLength={128} placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
-          <div><Button type="submit" disabled={loading}>{loading ? 'Changing…' : 'Change password'}</Button></div>
-        </form>
-      </CardContent>
-    </Card>
+    <SettingsCard
+      icon={KeyRound}
+      title="Password"
+      description="Use at least 12 characters. Changing it signs out every other session."
+    >
+      <form onSubmit={submit} className="grid max-w-sm gap-3">
+        <div className="grid gap-2">
+          <Label htmlFor="current-password">Current password</Label>
+          <Input id="current-password" type="password" autoComplete="current-password" maxLength={128} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="new-password">New password</Label>
+          <Input id="new-password" type="password" autoComplete="new-password" minLength={12} maxLength={128} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+        </div>
+        <div><Button type="submit" disabled={loading}>{loading ? 'Changing…' : 'Change password'}</Button></div>
+      </form>
+    </SettingsCard>
   )
 }
 
@@ -205,49 +301,42 @@ function TwoFactorCard({ onEnabled }: { onEnabled: () => void }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5" /> Two-factor authentication
-        </CardTitle>
-        <CardDescription>Require a TOTP code from an authenticator app at sign-in.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {enabled ? (
-          <div className="flex items-center gap-3">
-            <Badge>Enabled</Badge>
-            <Button variant="outline" size="sm" onClick={disable}>Disable</Button>
-          </div>
-        ) : totpURI ? (
-          <form onSubmit={verify} className="grid max-w-xs gap-3">
-            <p className="text-sm text-muted-foreground">
-              Scan this QR code with your authenticator app, then enter the 6-digit code.
-            </p>
-            {qrDataUrl && <img src={qrDataUrl} alt="TOTP QR code" width={180} height={180} className="rounded-md border bg-white p-2" />}
-            <details className="text-xs text-muted-foreground">
-              <summary className="cursor-pointer">Manual entry URI</summary>
-              <code className="break-all">{totpURI}</code>
-            </details>
+    <SettingsCard
+      icon={ShieldCheck}
+      title="Two-factor authentication"
+      description="Require a code from an authenticator app at sign-in."
+      aside={<StatusPill on={enabled}>{enabled ? 'On' : 'Off'}</StatusPill>}
+      footer={enabled && <Button variant="outline" size="sm" onClick={disable}>Turn off</Button>}
+    >
+      {enabled ? null : totpURI ? (
+        <form onSubmit={verify} className="grid max-w-xs gap-3">
+          <p className="text-sm text-muted-foreground">
+            Scan this QR code with your authenticator app, then enter the 6-digit code.
+          </p>
+          {qrDataUrl && <img src={qrDataUrl} alt="TOTP QR code" width={180} height={180} className="rounded-xl border bg-white p-2 shadow-sm" />}
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">Manual entry URI</summary>
+            <code className="break-all">{totpURI}</code>
+          </details>
+          <Input
+            inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="123456"
+            value={code} onChange={(e) => setCode(e.target.value)} required
+          />
+          <div><Button type="submit" disabled={loading}>{loading ? 'Verifying…' : 'Verify & enable'}</Button></div>
+        </form>
+      ) : (
+        <form onSubmit={enable} className="grid max-w-xs gap-3">
+          <div className="grid gap-2">
+            <Label htmlFor="twofa-password">Confirm your password</Label>
             <Input
-              inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="123456"
-              value={code} onChange={(e) => setCode(e.target.value)} required
+              id="twofa-password" type="password" maxLength={128} autoComplete="current-password" value={password}
+              onChange={(e) => setPassword(e.target.value)} required
             />
-            <Button type="submit" disabled={loading}>{loading ? 'Verifying…' : 'Verify & enable'}</Button>
-          </form>
-        ) : (
-          <form onSubmit={enable} className="grid max-w-xs gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="twofa-password">Confirm your password</Label>
-              <Input
-                id="twofa-password" type="password" maxLength={128} autoComplete="current-password" value={password}
-                onChange={(e) => setPassword(e.target.value)} required
-              />
-            </div>
-            <Button type="submit" disabled={loading}>{loading ? 'Loading…' : 'Set up 2FA'}</Button>
-          </form>
-        )}
-      </CardContent>
-    </Card>
+          </div>
+          <div><Button type="submit" disabled={loading}>{loading ? 'Loading…' : 'Set up 2FA'}</Button></div>
+        </form>
+      )}
+    </SettingsCard>
   )
 }
 
@@ -268,31 +357,37 @@ function SessionsCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Laptop className="h-5 w-5" /> Sessions</CardTitle>
-        <CardDescription>Sessions expire after 24 hours of inactivity.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        <Table>
-          <TableHeader><TableRow><TableHead>Device</TableHead><TableHead>IP</TableHead><TableHead>Last active</TableHead><TableHead /></TableRow></TableHeader>
-          <TableBody>
-            {sessions.map((session) => (
-              <TableRow key={session.id}>
-                <TableCell className="max-w-[260px] truncate" title={session.userAgent ?? ''}>
-                  {session.current ? <Badge className="mr-2">current</Badge> : null}
-                  {session.userAgent?.slice(0, 60) ?? 'Unknown device'}
-                </TableCell>
-                <TableCell className="font-mono text-xs">{session.ipAddress ?? '—'}</TableCell>
-                <TableCell><LocalTime value={session.updatedAt} /></TableCell>
-                <TableCell>{!session.current && <Button variant="ghost" size="icon" onClick={() => revoke(session.id)}><Trash2 className="text-destructive" /></Button>}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        <div><Button variant="outline" size="sm" onClick={revokeOthers}>Revoke other sessions</Button></div>
-      </CardContent>
-    </Card>
+    <SettingsCard
+      icon={Laptop}
+      title="Sessions"
+      description="Devices signed in to your account. Sessions expire after 24 hours of inactivity."
+      flush
+      footer={sessions.length > 1 && <Button variant="outline" size="sm" onClick={revokeOthers}>Sign out other sessions</Button>}
+    >
+      <ul className="divide-y">
+        {sessions.map((session) => (
+          <li key={session.id} className="flex items-center gap-3 px-5 py-3">
+            <div className="grid min-w-0 flex-1 gap-0.5">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <span className="truncate" title={session.userAgent ?? ''}>{describeAgent(session.userAgent)}</span>
+                {session.current && <StatusPill on>This device</StatusPill>}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                <span className="font-mono">{session.ipAddress ?? 'Unknown IP'}</span> · Active <LocalTime value={session.updatedAt} />
+              </div>
+            </div>
+            {!session.current && (
+              <Button
+                variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive"
+                title="Sign out this session" aria-label="Sign out this session" onClick={() => revoke(session.id)}
+              >
+                <Trash2 />
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </SettingsCard>
   )
 }
 
@@ -321,49 +416,34 @@ function PasskeysCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Fingerprint className="h-5 w-5" /> Passkeys
-        </CardTitle>
-        <CardDescription>Sign in with biometrics or a security key.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {passkeys.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No passkeys registered yet.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Added</TableHead>
-                <TableHead className="w-[60px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {passkeys.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>{p.name ?? 'Passkey'}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {p.createdAt ? <LocalTime value={p.createdAt} dateOnly /> : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => remove(p.id)}>
-                      <Trash2 className="text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-        <div>
-          <Button variant="outline" size="sm" onClick={add}>
-            <Plus /> Add a passkey
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <SettingsCard
+      icon={Fingerprint}
+      title="Passkeys"
+      description="Sign in with biometrics or a security key instead of a password."
+      flush
+      footer={<Button variant="outline" size="sm" onClick={add}><Plus /> Add a passkey</Button>}
+    >
+      {passkeys.length === 0 ? <ListEmpty>No passkeys yet.</ListEmpty> : (
+        <ul className="divide-y">
+          {passkeys.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 px-5 py-3">
+              <div className="grid min-w-0 flex-1 gap-0.5">
+                <span className="truncate text-sm font-medium">{p.name ?? 'Passkey'}</span>
+                <span className="text-xs text-muted-foreground">
+                  {p.createdAt ? <>Added <LocalTime value={p.createdAt} dateOnly /></> : 'Added date unknown'}
+                </span>
+              </div>
+              <Button
+                variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive"
+                title="Remove passkey" aria-label={`Remove ${p.name ?? 'passkey'}`} onClick={() => remove(p.id)}
+              >
+                <Trash2 />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SettingsCard>
   )
 }
 
@@ -398,86 +478,73 @@ function ApiKeysCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KeyRound className="h-5 w-5" /> API keys
-        </CardTitle>
-        <CardDescription>
-          Use <code className="text-xs">Authorization: Bearer &lt;key&gt;</code> against <code className="text-xs">/api/v1/*</code>.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {keys.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Key</TableHead>
-                <TableHead>Last used</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead className="w-[60px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {keys.map((k) => (
-                <TableRow key={k.id}>
-                  <TableCell>
-                    <div>{k.name}</div>
-                    <div className="text-xs text-muted-foreground">{k.scopes.join(', ')}</div>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{k.keyPrefix}…</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {k.lastUsedAt ? <LocalTime value={k.lastUsedAt} dateOnly /> : 'never'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground"><LocalTime value={k.expiresAt} dateOnly /></TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => remove(k.id)}>
-                      <Trash2 className="text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-        <div>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-            <Plus /> New API key
-          </Button>
-        </div>
-
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setNewKey(null) }}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{newKey ? 'Key created' : 'New API key'}</DialogTitle>
-              <DialogDescription>
-                {newKey ? 'Copy this key now — it will never be shown again.' : 'Give the key a name so you remember what uses it.'}
-              </DialogDescription>
-            </DialogHeader>
-            {newKey ? (
-              <div className="grid gap-3">
-                <code className="break-all rounded-md border bg-muted p-3 font-mono text-sm">{newKey}</code>
-                <Button
-                  variant="outline"
-                  onClick={async () => { await navigator.clipboard.writeText(newKey); toast.success('Copied') }}
-                >
-                  <Copy /> Copy key
-                </Button>
-              </div>
-            ) : (
-              <form onSubmit={create} className="grid gap-3">
-                <Input placeholder="e.g. CI deploy script" value={name} onChange={(e) => setName(e.target.value)} required />
-                <div className="grid gap-2">
-                  <Label htmlFor="key-expiry">Expires in days</Label>
-                  <Input id="key-expiry" type="number" min={1} max={365} value={expiresInDays} onChange={(e) => setExpiresInDays(Number(e.target.value))} required />
+    <SettingsCard
+      icon={KeyRound}
+      title="API keys"
+      description={<>Use <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">Authorization: Bearer &lt;key&gt;</code> against <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/api/v1/*</code> and the MCP server.</>}
+      flush
+      footer={<Button variant="outline" size="sm" onClick={() => setOpen(true)}><Plus /> New API key</Button>}
+    >
+      {keys.length === 0 ? <ListEmpty>No API keys yet.</ListEmpty> : (
+        <ul className="divide-y">
+          {keys.map((k) => (
+            <li key={k.id} className="flex items-center gap-3 px-5 py-3">
+              <div className="grid min-w-0 flex-1 gap-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-sm font-medium">{k.name}</span>
+                  <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">{k.keyPrefix}…</code>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Permissions</Label>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span>{k.scopes.join(', ')}</span>
+                  <span>Last used {k.lastUsedAt ? <LocalTime value={k.lastUsedAt} dateOnly /> : 'never'}</span>
+                  <span>Expires <LocalTime value={k.expiresAt} dateOnly /></span>
+                </div>
+              </div>
+              <Button
+                variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive"
+                title="Delete key" aria-label={`Delete ${k.name}`} onClick={() => remove(k.id)}
+              >
+                <Trash2 />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setNewKey(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{newKey ? 'Key created' : 'New API key'}</DialogTitle>
+            <DialogDescription>
+              {newKey ? 'Copy this key now — it will never be shown again.' : 'Give the key a name so you remember what uses it.'}
+            </DialogDescription>
+          </DialogHeader>
+          {newKey ? (
+            <div className="grid gap-3">
+              <code className="break-all rounded-lg border bg-muted/50 p-3 font-mono text-sm">{newKey}</code>
+              <Button
+                variant="outline"
+                onClick={async () => { await navigator.clipboard.writeText(newKey); toast.success('Copied') }}
+              >
+                <Copy /> Copy key
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={create} className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="key-name">Name</Label>
+                <Input id="key-name" placeholder="e.g. CI deploy script" value={name} onChange={(e) => setName(e.target.value)} required />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="key-expiry">Expires in days</Label>
+                <Input id="key-expiry" type="number" min={1} max={365} value={expiresInDays} onChange={(e) => setExpiresInDays(Number(e.target.value))} required />
+              </div>
+              <div className="grid gap-2">
+                <Label>Permissions</Label>
+                <div className="grid gap-2 rounded-lg border p-3">
                   {API_SCOPES.map((scope) => (
-                    <label key={scope} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
+                    <label key={scope} className="flex items-center gap-2 font-mono text-sm">
+                      <Checkbox
                         checked={scopes.has(scope)}
                         onChange={(e) => {
                           const next = new Set(scopes)
@@ -489,40 +556,37 @@ function ApiKeysCard() {
                     </label>
                   ))}
                 </div>
-                <DialogFooter>
-                  <Button type="submit">Create key</Button>
-                </DialogFooter>
-              </form>
-            )}
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
+              </div>
+              <DialogFooter>
+                <Button type="submit">Create key</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+    </SettingsCard>
   )
 }
 
 function SecurityActivityCard() {
   const { securityEvents } = Route.useLoaderData()
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5" /> Security activity</CardTitle>
-        <CardDescription>Recent credential and account-sensitive actions.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {securityEvents.length === 0 ? <p className="text-sm text-muted-foreground">No events recorded yet.</p> : (
-          <Table>
-            <TableHeader><TableRow><TableHead>Event</TableHead><TableHead>IP</TableHead><TableHead>Time</TableHead></TableRow></TableHeader>
-            <TableBody>{securityEvents.map((event) => (
-              <TableRow key={event.id}>
-                <TableCell className="font-mono text-xs">{event.action}</TableCell>
-                <TableCell className="font-mono text-xs">{event.ip ?? '—'}</TableCell>
-                <TableCell><LocalTime value={event.createdAt} /></TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <SettingsCard icon={Activity} title="Security activity" description="Recent sign-ins, credential changes, and other sensitive actions." flush>
+      {securityEvents.length === 0 ? <ListEmpty>No events recorded yet.</ListEmpty> : (
+        <ul className="divide-y">
+          {securityEvents.map((event) => (
+            <li key={event.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-5 py-2.5 text-sm">
+              <span className="flex min-w-0 items-center gap-2">
+                <Check className="size-3.5 shrink-0 text-muted-foreground" />
+                <code className="truncate font-mono text-xs">{event.action}</code>
+              </span>
+              <span className="text-xs text-muted-foreground">
+                <span className="font-mono">{event.ip ?? '—'}</span> · <LocalTime value={event.createdAt} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SettingsCard>
   )
 }

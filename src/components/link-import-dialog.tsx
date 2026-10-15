@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { importLinks, type LinkInput } from '~/lib/links'
 import { parseLinkCsv } from '~/lib/csv'
+import { CheckCircle2, FileUp } from 'lucide-react'
 import { Button } from './ui/button'
-import { Input } from './ui/input'
 import { Label } from './ui/label'
+import { Select } from './ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
 
@@ -62,15 +63,20 @@ export function LinkImportDialog({ open, onOpenChange, onImported }: Props) {
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Import links from CSV</DialogTitle>
-          <DialogDescription>Up to 200 rows. Required column: url or destination. Optional: code, title, tags, status, starts_at, expires_at, expired_redirect_url, max_clicks, privacy_enabled, password.</DialogDescription>
+          <DialogDescription>
+            Up to 200 rows. Needs a <code className="font-mono text-xs">url</code> or <code className="font-mono text-xs">destination</code> column.
+          </DialogDescription>
         </DialogHeader>
         {result ? (
           <div className="grid gap-3">
-            <div className="rounded-md border bg-muted/40 p-3 text-sm">
-              {result.created} created · {result.updated} updated · {result.skipped} skipped
+            <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
+              <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>
+                <span className="font-medium">{result.created} created</span> · {result.updated} updated · {result.skipped} skipped
+              </span>
             </div>
             {result.errors.length > 0 && (
-              <div className="max-h-56 overflow-y-auto rounded-md border">
+              <div className="max-h-56 overflow-y-auto rounded-lg border">
                 {result.errors.map((error) => (
                   <div key={`${error.row}-${error.message}`} className="border-b px-3 py-2 text-sm last:border-0">
                     <span className="font-medium">Row {error.row}:</span> {error.message}
@@ -80,21 +86,30 @@ export function LinkImportDialog({ open, onOpenChange, onImported }: Props) {
             )}
           </div>
         ) : <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="csv-file">CSV file</Label>
-            <Input id="csv-file" type="file" accept=".csv,text/csv" onChange={(event) => choose(event.target.files?.[0])} />
-          </div>
+          <label
+            htmlFor="csv-file"
+            className="grid cursor-pointer justify-items-center gap-2 rounded-xl border border-dashed bg-muted/20 px-6 py-8 text-center transition-colors hover:bg-muted/40 focus-within:ring-1 focus-within:ring-ring"
+          >
+            <span className="grid size-10 place-items-center rounded-lg border bg-background text-muted-foreground shadow-xs">
+              <FileUp className="size-5" />
+            </span>
+            <span className="text-sm font-medium">{filename || 'Choose a CSV file'}</span>
+            <span className="text-xs text-muted-foreground">
+              Optional columns: code, title, tags, status, starts_at, expires_at, expired_redirect_url, max_clicks, privacy_enabled, password
+            </span>
+            <input id="csv-file" type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => choose(event.target.files?.[0])} />
+          </label>
           <div className="grid gap-2">
             <Label htmlFor="conflicts">When a code already exists</Label>
-            <select id="conflicts" className="h-9 rounded-md border bg-background px-3 text-sm" value={conflict} onChange={(event) => setConflict(event.target.value as typeof conflict)}>
+            <Select id="conflicts" value={conflict} onChange={(event) => setConflict(event.target.value as typeof conflict)}>
               <option value="skip">Skip it</option>
               <option value="generate">Generate a new code</option>
               <option value="replace">Replace the accessible link</option>
-            </select>
+            </Select>
           </div>
           {rows.length > 0 && (
-            <div className="rounded-md border">
-              <div className="border-b px-3 py-2 text-sm font-medium">{filename}: {rows.length} link{rows.length === 1 ? '' : 's'}</div>
+            <div className="overflow-hidden rounded-lg border">
+              <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium">{rows.length} link{rows.length === 1 ? '' : 's'} ready to import</div>
               <Table>
                 <TableHeader><TableRow><TableHead>Code</TableHead><TableHead>Destination</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                 <TableBody>
@@ -115,7 +130,10 @@ export function LinkImportDialog({ open, onOpenChange, onImported }: Props) {
           {result ? (
             <Button onClick={() => { onOpenChange(false); setRows([]); setFilename('') }}>Done</Button>
           ) : (
-            <Button onClick={submit} disabled={loading || rows.length === 0}>{loading ? 'Importing…' : `Import ${rows.length || ''} links`}</Button>
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button onClick={submit} disabled={loading || rows.length === 0}>{loading ? 'Importing…' : `Import ${rows.length || ''} links`}</Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>
