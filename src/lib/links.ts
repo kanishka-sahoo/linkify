@@ -2,9 +2,9 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { nanoid } from 'nanoid'
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from './db'
-import { clicks, guestAccess, links, apiKeys, user as userTable } from './schema'
+import { clicks, links, apiKeys, user as userTable } from './schema'
 import { auth } from './auth'
 import { generateApiKey, hashPassword } from './keys'
 import { API_SCOPES, type ApiScope } from './api-scopes'
@@ -15,6 +15,8 @@ import {
   normalizeTags, parseLinkInput, safeLink, validateCode,
 } from './link-domain'
 import { getClickStats } from './stats'
+import { ownedByClause } from './link-access'
+import { overviewFor } from './link-service'
 import { parseClickLogCursor, parseClickLogFilter, queryClickLog, withoutPersonalData } from './click-log'
 
 export {
@@ -22,6 +24,7 @@ export {
   safeLink, validateCode, validateUrl,
 } from './link-domain'
 export type { LinkInput, LinkStatus, SafeLink } from './link-domain'
+export { ownedByClause } from './link-access'
 
 async function requireUser() {
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
@@ -36,22 +39,6 @@ async function requireEditor() {
   const user = await requireUser()
   if (isGuest(user)) throw new Error(GUEST_READ_ONLY)
   return user
-}
-
-/**
- * WHERE clause restricting links to those the actor may see. Admins see
- * everything; guests see the accounts they were granted; everyone else only
- * sees their own links. Write paths reject guests before using it.
- */
-export function ownedByClause(actor: { id: string; role: string }) {
-  if (actor.role === 'admin') return undefined
-  if (isGuest(actor)) {
-    return inArray(
-      links.userId,
-      db.select({ id: guestAccess.ownerId }).from(guestAccess).where(eq(guestAccess.guestId, actor.id)),
-    )
-  }
-  return eq(links.userId, actor.id)
 }
 
 const CREATE_LIMIT = 30
@@ -465,39 +452,7 @@ export const getClickLog = createServerFn({ method: 'GET' })
   })
 
 export const getOverview = createServerFn({ method: 'GET' }).handler(async () => {
-  const user = await requireUser()
-  const owned = ownedByClause(user)
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-  const [linkCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(links)
-    .where(owned)
-  // Click totals join links so non-admins only count their own links' clicks.
-  const inRange = and(gte(clicks.timestamp, since), eq(clicks.outcome, 'redirected'))
-  const clickQuery = db
-    .select({
-      total: sql<number>`count(*)::int`,
-      bots: sql<number>`count(*) filter (where ${clicks.isBot})::int`,
-      unique: sql<number>`count(distinct ${clicks.visitorHash}) filter (where not ${clicks.isBot})::int`,
-    })
-    .from(clicks)
-    .$dynamic()
-  const [clickTotals] = owned
-    ? await clickQuery.innerJoin(links, eq(clicks.linkId, links.id)).where(and(inRange, owned))
-    : await clickQuery.where(inRange)
-  const topLinks = await db
-    .select({ code: links.code, title: links.title, clicks: links.clickCount })
-    .from(links)
-    .where(owned)
-    .orderBy(desc(links.clickCount))
-    .limit(5)
-  return {
-    linkCount: linkCount.count,
-    clicks30d: clickTotals.total,
-    bots30d: clickTotals.bots,
-    unique30d: clickTotals.unique,
-    topLinks,
-  }
+  return overviewFor(await requireUser())
 })
 
 // ---------- api keys ----------
