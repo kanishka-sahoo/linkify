@@ -256,7 +256,7 @@ function ClickLog({ code, initial, countries }: { code: string; initial: ClickLo
         <div className="grid gap-1.5">
           <CardTitle>Click log</CardTitle>
           <CardDescription>
-            Every recorded visit, newest first. Privacy-enabled links omit raw IP, city, and user-agent values.
+            Every recorded visit, newest first. Privacy-enabled links, and guest accounts, omit raw IP, city, and user-agent values.
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm">

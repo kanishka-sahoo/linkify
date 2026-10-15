@@ -1,15 +1,17 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowRightLeft, Plus, ShieldMinus, ShieldPlus, Trash2, UserCheck, UserX, Users } from 'lucide-react'
+import { ArrowRightLeft, Eye, Plus, ShieldMinus, ShieldPlus, Trash2, UserCheck, UserX, Users } from 'lucide-react'
 import { authClient } from '~/lib/auth-client'
 import {
-  createUser, deactivateUser, deleteUser, listUsers, reactivateUser, setUserRole, takeOverLinks,
+  createGuest, createUser, deactivateUser, deleteUser, listUsers, reactivateUser, setGuestAccess, setUserRole,
+  takeOverLinks,
 } from '~/lib/users'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
 import { Badge } from '~/components/ui/badge'
+import { Checkbox } from '~/components/ui/checkbox'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '~/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
@@ -28,6 +30,8 @@ export const Route = createFileRoute('/dashboard/users')({
 
 const plural = (count: number) => `${count} link${count === 1 ? '' : 's'}`
 
+type UserRow = Awaited<ReturnType<typeof listUsers>>[number]
+
 function UsersPage() {
   const router = useRouter()
   const { users } = Route.useLoaderData()
@@ -37,6 +41,9 @@ function UsersPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [guestOpen, setGuestOpen] = useState(false)
+  const [accessFor, setAccessFor] = useState<UserRow | null>(null)
+  const owners = users.filter((u) => u.role !== 'guest')
 
   useEffect(() => {
     authClient.getSession().then(({ data }) => setMyId(data?.user.id ?? null))
@@ -151,7 +158,11 @@ function UsersPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{u.email}</TableCell>
                   <TableCell>
-                    {u.role === 'admin' ? <Badge>admin</Badge> : <Badge variant="outline">user</Badge>}
+                    {u.role === 'admin'
+                      ? <Badge>admin</Badge>
+                      : u.role === 'guest'
+                        ? <Badge variant="secondary" title={guestAccessLabel(u, users)}>guest · {u.guestOwnerIds.length} account{u.guestOwnerIds.length === 1 ? '' : 's'}</Badge>
+                        : <Badge variant="outline">user</Badge>}
                     {u.deactivatedAt && <Badge variant="secondary" className="ml-1">deactivated</Badge>}
                   </TableCell>
                   <TableCell>
@@ -169,7 +180,12 @@ function UsersPage() {
                             <ArrowRightLeft />
                           </Button>
                         )}
-                        {!u.deactivatedAt && (
+                        {u.role === 'guest' && (
+                          <Button variant="ghost" size="icon" title="Change which accounts this guest can view" onClick={() => setAccessFor(u)}>
+                            <Eye />
+                          </Button>
+                        )}
+                        {!u.deactivatedAt && u.role !== 'guest' && (
                           <Button
                             variant="ghost" size="icon"
                             title={u.role === 'admin' ? 'Revoke admin' : 'Make admin'}
@@ -201,9 +217,12 @@ function UsersPage() {
               ))}
             </TableBody>
           </Table>
-          <div>
+          <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
               <Plus /> Add member
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setGuestOpen(true)}>
+              <Eye /> Add guest
             </Button>
           </div>
 
@@ -237,8 +256,130 @@ function UsersPage() {
               </form>
             </DialogContent>
           </Dialog>
+
+          <GuestDialog
+            open={guestOpen}
+            onOpenChange={setGuestOpen}
+            owners={owners}
+            onSaved={() => router.invalidate()}
+          />
+          <GuestDialog
+            open={Boolean(accessFor)}
+            onOpenChange={(next) => { if (!next) setAccessFor(null) }}
+            owners={owners}
+            guest={accessFor}
+            onSaved={() => router.invalidate()}
+          />
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function guestAccessLabel(guest: UserRow, users: UserRow[]) {
+  const emails = users.filter((u) => guest.guestOwnerIds.includes(u.id)).map((u) => u.email)
+  return emails.length ? `Can view links of ${emails.join(', ')}` : 'Can view nothing yet'
+}
+
+/** Creates a guest, or with `guest` set, edits which accounts it can view. */
+function GuestDialog({ open, onOpenChange, owners, guest, onSaved }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  owners: UserRow[]
+  guest?: UserRow | null
+  onSaved: () => void
+}) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [ownerIds, setOwnerIds] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setName('')
+    setEmail('')
+    setPassword('')
+    setOwnerIds(new Set(guest?.guestOwnerIds ?? []))
+  }, [open, guest])
+
+  function toggle(id: string) {
+    const next = new Set(ownerIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setOwnerIds(next)
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      if (guest) {
+        await setGuestAccess({ data: { id: guest.id, ownerIds: [...ownerIds] } })
+        toast.success('Guest access updated')
+      } else {
+        await createGuest({ data: { name, email, password, ownerIds: [...ownerIds] } })
+        toast.success(`Guest account created for ${email}`)
+      }
+      onOpenChange(false)
+      onSaved()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save guest')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{guest ? `Access for ${guest.email}` : 'Add a guest'}</DialogTitle>
+          <DialogDescription>
+            Guests can view the links and analytics of the accounts you choose, without visitor IPs or user agents.
+            They can't change anything, including their own password, so the credentials are safe to share for a demo.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="grid gap-3">
+          {!guest && (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="guest-name">Name</Label>
+                <Input id="guest-name" value={name} onChange={(e) => setName(e.target.value)} required />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="guest-email">Email</Label>
+                <Input id="guest-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="guest-password">Password</Label>
+                <Input
+                  id="guest-password" type="password" minLength={12} maxLength={128} autoComplete="new-password"
+                  value={password} onChange={(e) => setPassword(e.target.value)} required
+                />
+              </div>
+            </>
+          )}
+          <div className="grid gap-2">
+            <Label>Accounts this guest can view</Label>
+            <div className="grid max-h-56 gap-2 overflow-y-auto rounded-md border p-3">
+              {owners.map((owner) => (
+                <label key={owner.id} className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={ownerIds.has(owner.id)} onChange={() => toggle(owner.id)} />
+                  <span>{owner.name}</span>
+                  <span className="text-muted-foreground">{owner.email}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{plural(owner.linkCount)}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Saving…' : guest ? 'Save access' : 'Create guest'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

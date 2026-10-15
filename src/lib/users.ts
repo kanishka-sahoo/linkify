@@ -1,11 +1,11 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { and, asc, count, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm'
 import { auth } from './auth'
 import { db } from './db'
-import { links, session as sessionTable, user } from './schema'
+import { guestAccess, links, session as sessionTable, user } from './schema'
 import { auditEvent } from './audit'
-import { accountRestriction } from './account-policy'
+import { accountRestriction, isGuest } from './account-policy'
 
 async function requireAdmin() {
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
@@ -21,7 +21,7 @@ export const listUserDirectory = createServerFn({ method: 'GET' }).handler(async
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
   if (!session) throw new Error('Unauthorized')
   const query = db
-    .select({ id: user.id, name: user.name, email: user.email, deactivatedAt: user.deactivatedAt })
+    .select({ id: user.id, name: user.name, email: user.email, role: user.role, deactivatedAt: user.deactivatedAt })
     .from(user)
     .$dynamic()
   return (session.user.role === 'admin' ? query : query.where(eq(user.id, session.user.id))).orderBy(asc(user.createdAt))
@@ -64,42 +64,137 @@ export const listUsers = createServerFn({ method: 'GET' }).handler(async () => {
       deactivatedAt: user.deactivatedAt,
       createdAt: user.createdAt,
       linkCount: sql<number>`(select count(*)::int from ${links} where ${links.userId} = ${user.id})`,
+      guestOwnerIds: sql<string[]>`array(select ${guestAccess.ownerId} from ${guestAccess} where ${guestAccess.guestId} = ${user.id})`,
     })
     .from(user)
     .orderBy(asc(user.createdAt))
 })
 
+function parseNewAccount(value: Record<string, unknown>) {
+  if (typeof value.name !== 'string' || !value.name.trim() || value.name.length > 100) throw new Error('Name is required')
+  if (typeof value.email !== 'string' || value.email.length > 320 || !value.email.includes('@')) throw new Error('Valid email is required')
+  if (typeof value.password !== 'string' || value.password.length < 12 || value.password.length > 128) {
+    throw new Error('Password must be between 12 and 128 characters')
+  }
+  return { name: value.name, email: value.email, password: value.password }
+}
+
+function parseOwnerIds(value: unknown) {
+  if (!Array.isArray(value) || value.length > 100) throw new Error('Choose at most 100 accounts')
+  if (value.some((id) => typeof id !== 'string' || !id || id.length > 128)) throw new Error('Invalid account')
+  return [...new Set(value as string[])]
+}
+
+/** Create an account through better-auth so it gets a credential and the creation hook runs. */
+async function signUp(data: { name: string; email: string; password: string }) {
+  // Forward the caller's session headers so the creation hook in auth.ts
+  // recognizes this as an authorized admin action.
+  const result = await auth.api.signUpEmail({
+    body: {
+      name: data.name.trim(),
+      email: data.email.trim().toLowerCase(),
+      password: data.password,
+    },
+    headers: getRequestHeaders(),
+  })
+  return result.user
+}
+
+/** Replace which accounts a guest can view. Guests can't be granted other guests. */
+async function grantGuestAccess(guestId: string, ownerIds: string[]) {
+  if (ownerIds.length > 0) {
+    const owners = await db
+      .select({ id: user.id, role: user.role })
+      .from(user)
+      .where(inArray(user.id, ownerIds))
+    if (owners.length !== ownerIds.length) throw new Error('Account not found')
+    if (owners.some(isGuest)) throw new Error("Guests can't be given access to other guests")
+  }
+  // Two statements rather than delete-all + insert, so a failure part-way
+  // never leaves the guest with access to accounts outside the new set.
+  await db
+    .delete(guestAccess)
+    .where(and(
+      eq(guestAccess.guestId, guestId),
+      ownerIds.length > 0 ? notInArray(guestAccess.ownerId, ownerIds) : undefined,
+    ))
+  if (ownerIds.length > 0) {
+    await db
+      .insert(guestAccess)
+      .values(ownerIds.map((ownerId) => ({ guestId, ownerId })))
+      .onConflictDoNothing()
+  }
+}
+
 export const createUser = createServerFn({ method: 'POST' })
   .validator((input: unknown) => {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid input')
-    const value = input as Record<string, unknown>
-    if (typeof value.name !== 'string' || !value.name.trim() || value.name.length > 100) throw new Error('Name is required')
-    if (typeof value.email !== 'string' || value.email.length > 320 || !value.email.includes('@')) throw new Error('Valid email is required')
-    if (typeof value.password !== 'string' || value.password.length < 12 || value.password.length > 128) {
-      throw new Error('Temporary password must be between 12 and 128 characters')
-    }
-    return { name: value.name, email: value.email, password: value.password }
+    return parseNewAccount(input as Record<string, unknown>)
   })
   .handler(async ({ data }) => {
     const me = await requireAdmin()
-    // Forward the caller's session headers so the creation hook in auth.ts
-    // recognizes this as an authorized admin action.
-    const result = await auth.api.signUpEmail({
-      body: {
-        name: data.name.trim(),
-        email: data.email.trim().toLowerCase(),
-        password: data.password,
-      },
-      headers: getRequestHeaders(),
-    })
+    const created = await signUp(data)
     await auditEvent({
       action: 'admin.user.created',
       actorUserId: me.id,
       targetType: 'user',
-      targetId: result.user.id,
+      targetId: created.id,
       headers: getRequestHeaders(),
     })
-    return { id: result.user.id, email: result.user.email }
+    return { id: created.id, email: created.email }
+  })
+
+/**
+ * Create a read-only guest that can view the links and analytics of
+ * `ownerIds`. The password is final: guests can't change it, so the
+ * credentials can be shared (e.g. for a demo) without being taken over.
+ */
+export const createGuest = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid input')
+    const value = input as Record<string, unknown>
+    return { ...parseNewAccount(value), ownerIds: parseOwnerIds(value.ownerIds) }
+  })
+  .handler(async ({ data }) => {
+    const me = await requireAdmin()
+    const created = await signUp(data)
+    await db
+      .update(user)
+      .set({ role: 'guest', mustChangePassword: false, updatedAt: new Date() })
+      .where(eq(user.id, created.id))
+    // signUpEmail signs the new account in; that session belongs to no one.
+    await db.delete(sessionTable).where(eq(sessionTable.userId, created.id))
+    await grantGuestAccess(created.id, data.ownerIds)
+    await auditEvent({
+      action: 'admin.guest.created',
+      actorUserId: me.id,
+      targetType: 'user',
+      targetId: created.id,
+      headers: getRequestHeaders(),
+      metadata: { ownerIds: data.ownerIds },
+    })
+    return { id: created.id, email: created.email }
+  })
+
+export const setGuestAccess = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => ({
+    ...parseUserId(input),
+    ownerIds: parseOwnerIds((input as Record<string, unknown>).ownerIds),
+  }))
+  .handler(async ({ data }) => {
+    const me = await requireAdmin()
+    const target = await findUser(data.id)
+    if (!isGuest(target)) throw new Error('Only guest accounts have limited access')
+    await grantGuestAccess(data.id, data.ownerIds)
+    await auditEvent({
+      action: 'admin.guest.access_changed',
+      actorUserId: me.id,
+      targetType: 'user',
+      targetId: data.id,
+      headers: getRequestHeaders(),
+      metadata: { ownerIds: data.ownerIds },
+    })
+    return { ok: true }
   })
 
 export const setUserRole = createServerFn({ method: 'POST' })
@@ -115,6 +210,7 @@ export const setUserRole = createServerFn({ method: 'POST' })
     if (data.id === me.id) throw new Error("You can't change your own role")
     const target = await findUser(data.id)
     if (target.deactivatedAt) throw new Error('Reactivate this account before changing its role')
+    if (isGuest(target)) throw new Error("Guest accounts can't change role; create a new account instead")
     if (data.role !== 'admin' && target.role === 'admin' && (await activeAdminCount()) <= 1) {
       throw new Error("You can't demote the last admin")
     }

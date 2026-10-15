@@ -10,6 +10,11 @@ commits that shipped them; the dates below are the original commit dates.
 ## [Unreleased]
 
 ### Added
+- Read-only guest accounts for sharing demo credentials. Admins create them
+  under **Users → Add guest** and choose which accounts' links and analytics
+  they can view. Guests can't change links, their own password, 2FA, passkeys,
+  sessions, or API keys; their click logs omit visitor IP, city, and user
+  agent, and their settings don't list other viewers' sessions
 - Admins can take over every link owned by another account, admin or user,
   from the Users page. Admins who leave are deactivated instead of deleted:
   they can't sign in or use API keys, and their links keep redirecting until

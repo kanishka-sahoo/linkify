@@ -16,3 +16,14 @@ export function accountRestriction(account: AccountState): string | null {
   if (account.role === 'admin' && !account.twoFactorEnabled) return 'Enable two-factor authentication first'
   return null
 }
+
+export const GUEST_READ_ONLY = 'Guest accounts are read-only'
+
+/**
+ * Guests view a subset of accounts' links and analytics but can't change
+ * anything — not even their own password, 2FA, passkeys, sessions, or API
+ * keys — so their credentials can be shared without risk.
+ */
+export function isGuest(account: { role: string }) {
+  return account.role === 'guest'
+}

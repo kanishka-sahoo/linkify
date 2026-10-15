@@ -8,6 +8,12 @@ import { count, eq } from 'drizzle-orm'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { auditEvent } from './audit'
+import { GUEST_READ_ONLY, isGuest } from './account-policy'
+
+/** The only auth endpoints a signed-in guest may call; see isGuest(). */
+function guestMayCall(path: string) {
+  return path === '/get-session' || path === '/sign-out' || path.startsWith('/sign-in/')
+}
 
 function secretMatches(provided: string | null, expected: string | undefined) {
   if (!provided || !expected || expected.length < 32) return false
@@ -28,8 +34,8 @@ export const auth = betterAuth({
   }),
   user: {
     additionalFields: {
-      // 'admin' | 'user' — first account created becomes admin; only admins
-      // can create accounts after that (enforced in the hook below).
+      // 'admin' | 'user' | 'guest' — first account created becomes admin; only
+      // admins can create accounts after that (enforced in the hook below).
       role: { type: 'string', defaultValue: 'user', input: false },
       mustChangePassword: { type: 'boolean', defaultValue: false, input: false },
       bootstrapOwner: { type: 'boolean', defaultValue: false, input: false },
@@ -66,6 +72,13 @@ export const auth = betterAuth({
     },
   },
   hooks: {
+    // Shared guest credentials must stay usable: block a guest from changing
+    // their password, 2FA, passkeys, profile, or other viewers' sessions.
+    before: createAuthMiddleware(async (ctx) => {
+      if (guestMayCall(ctx.path) || !ctx.headers) return
+      const session = await auth.api.getSession({ headers: ctx.headers }).catch(() => null)
+      if (session && isGuest(session.user)) throw new APIError('FORBIDDEN', { message: GUEST_READ_ONLY })
+    }),
     after: createAuthMiddleware(async (ctx) => {
       const tracked = new Map<string, string>([
         ['/sign-in/email', 'auth.sign_in'],

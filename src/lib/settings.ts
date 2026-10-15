@@ -5,12 +5,20 @@ import { auth } from './auth'
 import { db } from './db'
 import { apiKeys, auditLogs, passkey, session as sessionTable, user } from './schema'
 import { auditEvent } from './audit'
+import { GUEST_READ_ONLY, isGuest } from './account-policy'
 
 async function currentSession() {
   const headers = getRequestHeaders()
   const current = await auth.api.getSession({ headers })
   if (!current) throw new Error('Unauthorized')
   return { current, headers }
+}
+
+/** currentSession() for credential and session changes, which guests can't make. */
+async function editableSession() {
+  const session = await currentSession()
+  if (isGuest(session.current.user)) throw new Error(GUEST_READ_ONLY)
+  return session
 }
 
 /**
@@ -20,6 +28,19 @@ async function currentSession() {
  */
 export const getSettingsData = createServerFn({ method: 'GET' }).handler(async () => {
   const { current } = await currentSession()
+  // Guest credentials are shared: don't show one viewer the others' sessions and IPs.
+  if (isGuest(current.user)) {
+    return {
+      guest: true,
+      keys: [],
+      passkeys: [],
+      sessions: [],
+      securityEvents: [],
+      twoFactorEnabled: false,
+      mustChangePassword: false,
+      twoFactorRequired: false,
+    }
+  }
   const [keys, passkeys, sessions, securityEvents] = await Promise.all([
     db
       .select({
@@ -70,6 +91,7 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
       .limit(20),
   ])
   return {
+    guest: false,
     keys,
     passkeys,
     sessions: sessions.map((row) => ({ ...row, current: row.id === current.session.id })),
@@ -98,7 +120,7 @@ export const changeMyPassword = createServerFn({ method: 'POST' })
     return { currentPassword: value.currentPassword, newPassword: value.newPassword }
   })
   .handler(async ({ data }) => {
-    const { current, headers } = await currentSession()
+    const { current, headers } = await editableSession()
     // better-auth's revokeOtherSessions also deletes the current session and
     // sets a replacement cookie, which a server function can't forward, so
     // the browser would be signed out. Keep this session; revoke the rest.
@@ -121,7 +143,7 @@ export const revokeSession = createServerFn({ method: 'POST' })
     return { id: value.id }
   })
   .handler(async ({ data }) => {
-    const { current, headers } = await currentSession()
+    const { current, headers } = await editableSession()
     if (data.id === current.session.id) throw new Error('Use sign out to end the current session')
     await db.delete(sessionTable).where(and(eq(sessionTable.id, data.id), eq(sessionTable.userId, current.user.id)))
     await auditEvent({
@@ -135,7 +157,7 @@ export const revokeSession = createServerFn({ method: 'POST' })
   })
 
 export const revokeOtherSessions = createServerFn({ method: 'POST' }).handler(async () => {
-  const { current, headers } = await currentSession()
+  const { current, headers } = await editableSession()
   await db
     .delete(sessionTable)
     .where(and(eq(sessionTable.userId, current.user.id), ne(sessionTable.id, current.session.id)))

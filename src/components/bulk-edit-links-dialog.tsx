@@ -11,7 +11,7 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   ids: string[]
-  users: { id: string; name: string; email: string; deactivatedAt: Date | null }[]
+  users: { id: string; name: string; email: string; role: string; deactivatedAt: Date | null }[]
   isAdmin: boolean
   onSaved: () => void
 }
@@ -76,7 +76,7 @@ export function BulkEditLinksDialog({ open, onOpenChange, ids, users, isAdmin, o
             <div className="grid gap-2"><Label htmlFor="add-tags">Add tags</Label><Input id="add-tags" placeholder="campaign, q4" value={addTags} onChange={(event) => setAddTags(event.target.value)} /></div>
             <div className="grid gap-2"><Label htmlFor="remove-tags">Remove tags</Label><Input id="remove-tags" placeholder="draft" value={removeTags} onChange={(event) => setRemoveTags(event.target.value)} /></div>
           </div>
-          {isAdmin && <div className="grid gap-2"><Label htmlFor="owner">Transfer ownership</Label><select id="owner" className="h-9 rounded-md border bg-background px-3 text-sm" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="">No change</option>{users.filter((user) => !user.deactivatedAt).map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select></div>}
+          {isAdmin && <div className="grid gap-2"><Label htmlFor="owner">Transfer ownership</Label><select id="owner" className="h-9 rounded-md border bg-background px-3 text-sm" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="">No change</option>{users.filter((user) => !user.deactivatedAt && user.role !== 'guest').map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select></div>}
           <DialogFooter><Button type="submit" disabled={loading}>{loading ? 'Updating…' : 'Apply changes'}</Button></DialogFooter>
         </form>
       </DialogContent>

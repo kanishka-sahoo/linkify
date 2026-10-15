@@ -208,12 +208,14 @@ function serverFnId(name: string) {
   throw new Error(`server function ${name} not found in build`)
 }
 
-/** Call a server function the way the browser does. */
-export async function callServerFn(app: App, name: string, data: unknown, cookie: string) {
-  const res = await fetch(`${app.baseUrl}/_serverFn/${serverFnId(name)}`, {
-    method: 'POST',
+/** Call a server function the way the browser does. GET functions take their payload in the query string. */
+export async function callServerFn(app: App, name: string, data: unknown, cookie: string, method: 'GET' | 'POST' = 'POST') {
+  const payload = JSON.stringify(await toJSONAsync({ data }))
+  const query = method === 'GET' ? `?${new URLSearchParams({ payload })}` : ''
+  const res = await fetch(`${app.baseUrl}/_serverFn/${serverFnId(name)}${query}`, {
+    method,
     headers: { origin: app.baseUrl, 'content-type': 'application/json', 'x-tsr-serverFn': 'true', cookie },
-    body: JSON.stringify(await toJSONAsync({ data })),
+    body: method === 'POST' ? payload : undefined,
   })
   return { status: res.status, setCookie: res.headers.getSetCookie(), body: await res.text() }
 }

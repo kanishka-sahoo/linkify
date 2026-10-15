@@ -62,6 +62,7 @@ function LinksPage() {
   const router = useRouter()
   const { user } = useRouteContext({ from: '/dashboard' })
   const isAdmin = user?.role === 'admin'
+  const readOnly = user?.role === 'guest'
   const { links, overview, users } = Route.useLoaderData()
   const ownerById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users])
   const [query, setQuery] = useState('')
@@ -259,12 +260,16 @@ function LinksPage() {
             </Button>
           ))}
         </div>
-        <Button variant="outline" onClick={() => setImportOpen(true)}>
-          <Upload /> Import CSV
-        </Button>
-        <Button onClick={() => { setEditing(null); setDuplicating(false); setFormOpen(true) }}>
-          <Plus /> New link
-        </Button>
+        {!readOnly && (
+          <>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload /> Import CSV
+            </Button>
+            <Button onClick={() => { setEditing(null); setDuplicating(false); setFormOpen(true) }}>
+              <Plus /> New link
+            </Button>
+          </>
+        )}
       </div>
 
       {allTags.length > 0 && (
@@ -309,15 +314,19 @@ function LinksPage() {
           <Button variant="outline" size="sm" onClick={onBulkExport}>
             <Download /> Export CSV
           </Button>
-          <Button variant="outline" size="sm" onClick={onBulkExpire}>
-            <TimerOff /> Expire now
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setBulkEditOpen(true)}>
-            <SlidersHorizontal /> Edit
-          </Button>
-          <Button variant="destructive" size="sm" onClick={onBulkDelete}>
-            <Trash2 /> Delete
-          </Button>
+          {!readOnly && (
+            <>
+              <Button variant="outline" size="sm" onClick={onBulkExpire}>
+                <TimerOff /> Expire now
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setBulkEditOpen(true)}>
+                <SlidersHorizontal /> Edit
+              </Button>
+              <Button variant="destructive" size="sm" onClick={onBulkDelete}>
+                <Trash2 /> Delete
+              </Button>
+            </>
+          )}
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
             <X /> Clear
           </Button>
@@ -347,7 +356,9 @@ function LinksPage() {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={isAdmin ? 7 : 6} className="py-10 text-center text-muted-foreground">
-                  {links.length === 0 ? 'No links yet — create your first one.' : 'No matches.'}
+                  {links.length > 0
+                    ? 'No matches.'
+                    : readOnly ? 'No links have been shared with this account.' : 'No links yet — create your first one.'}
                 </TableCell>
               </TableRow>
             )}
@@ -417,15 +428,19 @@ function LinksPage() {
                     <Button variant="ghost" size="icon" title="QR code" onClick={() => setQrFor(link.code)}>
                       <QrCode />
                     </Button>
-                    <Button variant="ghost" size="icon" title="Duplicate" onClick={() => { setEditing(link); setDuplicating(true); setFormOpen(true) }}>
-                      <CopyPlus />
-                    </Button>
-                    <Button variant="ghost" size="icon" title="Edit" onClick={() => { setEditing(link); setDuplicating(false); setFormOpen(true) }}>
-                      <Pencil />
-                    </Button>
-                    <Button variant="ghost" size="icon" title="Delete" onClick={() => onDelete(link)}>
-                      <Trash2 className="text-destructive" />
-                    </Button>
+                    {!readOnly && (
+                      <>
+                        <Button variant="ghost" size="icon" title="Duplicate" onClick={() => { setEditing(link); setDuplicating(true); setFormOpen(true) }}>
+                          <CopyPlus />
+                        </Button>
+                        <Button variant="ghost" size="icon" title="Edit" onClick={() => { setEditing(link); setDuplicating(false); setFormOpen(true) }}>
+                          <Pencil />
+                        </Button>
+                        <Button variant="ghost" size="icon" title="Delete" onClick={() => onDelete(link)}>
+                          <Trash2 className="text-destructive" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

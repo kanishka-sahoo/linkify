@@ -43,6 +43,13 @@
       "when": 1790578993224,
       "tag": "0005_user_deactivated",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792051953421,
+      "tag": "0006_guest_access",
+      "breakpoints": true
     }
   ]
 }

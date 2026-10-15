@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { and, eq } from 'drizzle-orm'
 import { auth } from '~/lib/auth'
-import { accountRestriction } from '~/lib/account-policy'
+import { accountRestriction, isGuest } from '~/lib/account-policy'
 import { clickLogCsv, parseClickLogFilter } from '~/lib/click-log'
 import { db } from '~/lib/db'
 import { links } from '~/lib/schema'
@@ -32,7 +32,7 @@ export const Route = createFileRoute('/api/links/$code/clicks')({
         const url = new URL(request.url)
         const filter = parseClickLogFilter(Object.fromEntries(url.searchParams))
         const filename = `${code}-clicks-${new Date().toISOString().slice(0, 10)}.csv`
-        return new Response(clickLogCsv(link.id, filter), {
+        return new Response(clickLogCsv(link.id, filter, isGuest(session.user)), {
           headers: {
             'content-type': 'text/csv; charset=utf-8',
             'content-disposition': `attachment; filename="${filename}"`,
