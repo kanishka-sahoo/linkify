@@ -20,7 +20,7 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [totpCode, setTotpCode] = useState('')
   const [awaitingTotp, setAwaitingTotp] = useState(false)
@@ -29,19 +29,18 @@ function LoginPage() {
   async function onPasswordSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    const { error } = await authClient.signIn.email(
-      { email, password },
-      {
-        onSuccess: (ctx) => {
-          // better-auth signals a pending 2FA challenge via twoFactorRedirect
-          if ((ctx.data as { twoFactorRedirect?: boolean })?.twoFactorRedirect) {
-            setAwaitingTotp(true)
-          } else {
-            router.navigate({ to: '/dashboard' })
-          }
-        },
-      },
-    )
+    // better-auth signals a pending 2FA challenge via twoFactorRedirect
+    const onSuccess = ({ data }: { data: unknown }) => {
+      if ((data as { twoFactorRedirect?: boolean })?.twoFactorRedirect) {
+        setAwaitingTotp(true)
+      } else {
+        router.navigate({ to: '/dashboard' })
+      }
+    }
+    // Usernames can't contain '@', so anything with one is an email.
+    const { error } = login.includes('@')
+      ? await authClient.signIn.email({ email: login.trim(), password }, { onSuccess })
+      : await authClient.signIn.username({ username: login.trim(), password }, { onSuccess })
     setLoading(false)
     if (error) toast.error(error.message ?? 'Sign in failed')
   }
@@ -106,8 +105,16 @@ function LoginPage() {
             <>
               <form onSubmit={onPasswordSubmit} className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <Label htmlFor="login">Email or username</Label>
+                  <Input
+                    id="login"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={login}
+                    onChange={(e) => setLogin(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="password">Password</Label>

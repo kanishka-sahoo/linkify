@@ -59,6 +59,7 @@ export const listUsers = createServerFn({ method: 'GET' }).handler(async () => {
       id: user.id,
       name: user.name,
       email: user.email,
+      username: user.displayUsername,
       role: user.role,
       twoFactorEnabled: user.twoFactorEnabled,
       deactivatedAt: user.deactivatedAt,
@@ -76,7 +77,11 @@ function parseNewAccount(value: Record<string, unknown>) {
   if (typeof value.password !== 'string' || value.password.length < 12 || value.password.length > 128) {
     throw new Error('Password must be between 12 and 128 characters')
   }
-  return { name: value.name, email: value.email, password: value.password }
+  // Optional; better-auth's username plugin validates format and uniqueness.
+  if (value.username !== undefined && (typeof value.username !== 'string' || value.username.length > 30)) {
+    throw new Error('Username must be at most 30 characters')
+  }
+  return { name: value.name, email: value.email, password: value.password, username: value.username?.trim() || undefined }
 }
 
 function parseOwnerIds(value: unknown) {
@@ -86,7 +91,7 @@ function parseOwnerIds(value: unknown) {
 }
 
 /** Create an account through better-auth so it gets a credential and the creation hook runs. */
-async function signUp(data: { name: string; email: string; password: string }) {
+async function signUp(data: { name: string; email: string; password: string; username?: string }) {
   // Forward the caller's session headers so the creation hook in auth.ts
   // recognizes this as an authorized admin action.
   const result = await auth.api.signUpEmail({
@@ -94,6 +99,7 @@ async function signUp(data: { name: string; email: string; password: string }) {
       name: data.name.trim(),
       email: data.email.trim().toLowerCase(),
       password: data.password,
+      username: data.username,
     },
     headers: getRequestHeaders(),
   })

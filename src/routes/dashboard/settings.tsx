@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Activity, Copy, Fingerprint, KeyRound, Laptop, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { Activity, AtSign, Copy, Fingerprint, KeyRound, Laptop, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import QRCode from 'qrcode'
 import { authClient } from '~/lib/auth-client'
 import { createApiKey, deleteApiKey } from '~/lib/links'
@@ -59,6 +59,7 @@ function SettingsPage() {
           Set it up below with an authenticator app.
         </div>
       )}
+      <UsernameCard />
       <PasswordCard onChanged={() => completed('password')} />
       <TwoFactorCard onEnabled={() => completed('twoFactor')} />
       <PasskeysCard />
@@ -66,6 +67,44 @@ function SettingsPage() {
       <ApiKeysCard />
       <SecurityActivityCard />
     </div>
+  )
+}
+
+function UsernameCard() {
+  const router = useRouter()
+  const { username: current } = Route.useLoaderData()
+  const [username, setUsername] = useState(current ?? '')
+  const [loading, setLoading] = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    const { error } = await authClient.updateUser({ username: username.trim(), displayUsername: username.trim() })
+    setLoading(false)
+    if (error) return toast.error(error.message ?? 'Could not change username')
+    toast.success('Username saved')
+    router.invalidate()
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><AtSign className="h-5 w-5" /> Username</CardTitle>
+        <CardDescription>Sign in with this instead of your email. Letters, numbers, underscores and dots.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="flex max-w-sm gap-2">
+          <Input
+            autoComplete="username" autoCapitalize="none" spellCheck={false}
+            minLength={3} maxLength={30} pattern="[A-Za-z0-9_.]+" placeholder="Username"
+            value={username} onChange={(e) => setUsername(e.target.value)} required
+          />
+          <Button type="submit" disabled={loading || username.trim() === (current ?? '')}>
+            {loading ? 'Saving…' : 'Save'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   )
 }
 

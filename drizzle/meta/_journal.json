@@ -50,6 +50,13 @@
       "when": 1792051953421,
       "tag": "0006_guest_access",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792057184969,
+      "tag": "0007_usernames",
+      "breakpoints": true
     }
   ]
 }
