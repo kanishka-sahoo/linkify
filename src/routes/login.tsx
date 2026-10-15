@@ -1,13 +1,13 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { KeyRound } from 'lucide-react'
+import { ArrowLeft, KeyRound } from 'lucide-react'
 import { getBootstrap } from '~/lib/session'
 import { authClient } from '~/lib/auth-client'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
+import { AuthCard, AuthShell } from '~/components/auth-shell'
 
 export const Route = createFileRoute('/login')({
   beforeLoad: async () => {
@@ -69,82 +69,81 @@ function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Linkify</CardTitle>
-          <CardDescription>
-            {awaitingTotp ? 'Enter the 6-digit code from your authenticator app.' : 'Sign in to your dashboard.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {awaitingTotp ? (
-            <form onSubmit={onTotpSubmit} className="grid gap-4">
+    <AuthShell>
+      <AuthCard
+        title={awaitingTotp ? 'Two-factor authentication' : 'Sign in'}
+        description={awaitingTotp ? 'Enter the 6-digit code from your authenticator app.' : 'Welcome back. Sign in to manage your links.'}
+        footer={!awaitingTotp && 'Accounts are created by an administrator.'}
+      >
+        {awaitingTotp ? (
+          <form onSubmit={onTotpSubmit} className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="totp">Authenticator code</Label>
+              <Input
+                id="totp"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="123456"
+                className="h-11 text-center font-mono text-lg tracking-[0.4em]"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+            <Button type="submit" className="h-10" disabled={loading}>
+              {loading ? 'Verifying…' : 'Verify'}
+            </Button>
+            <Button type="button" variant="ghost" className="text-muted-foreground" onClick={() => setAwaitingTotp(false)}>
+              <ArrowLeft /> Back
+            </Button>
+          </form>
+        ) : (
+          <div className="grid gap-5">
+            <form onSubmit={onPasswordSubmit} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="totp">Authenticator code</Label>
+                <Label htmlFor="login">Email or username</Label>
                 <Input
-                  id="totp"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  placeholder="123456"
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value)}
+                  id="login"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  className="h-10"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
                   autoFocus
                   required
                 />
               </div>
-              <Button type="submit" disabled={loading}>
-                {loading ? 'Verifying…' : 'Verify'}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setAwaitingTotp(false)}>
-                Back
+              <div className="grid gap-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  className="h-10"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="h-10" disabled={loading}>
+                {loading ? 'Signing in…' : 'Sign in'}
               </Button>
             </form>
-          ) : (
-            <>
-              <form onSubmit={onPasswordSubmit} className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="login">Email or username</Label>
-                  <Input
-                    id="login"
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    value={login}
-                    onChange={(e) => setLogin(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                <Button type="submit" disabled={loading}>
-                  {loading ? 'Signing in…' : 'Sign in'}
-                </Button>
-              </form>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">or</span>
-                </div>
-              </div>
-              <Button type="button" variant="outline" onClick={onPasskey} disabled={loading}>
-                <KeyRound /> Sign in with a passkey
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              or
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <Button type="button" variant="outline" className="h-10" onClick={onPasskey} disabled={loading}>
+              <KeyRound /> Sign in with a passkey
+            </Button>
+          </div>
+        )}
+      </AuthCard>
+    </AuthShell>
   )
 }

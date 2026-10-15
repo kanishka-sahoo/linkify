@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { bulkUpdateLinks } from '~/lib/links'
 import { Button } from './ui/button'
-import { Checkbox } from './ui/checkbox'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
+import { Select } from './ui/select'
+import { Switch } from './ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog'
 
 interface Props {
@@ -14,6 +15,25 @@ interface Props {
   users: { id: string; name: string; email: string; role: string; deactivatedAt: Date | null }[]
   isAdmin: boolean
   onSaved: () => void
+}
+
+/** A switch that reveals its field; off means "leave this as it is". */
+function OptionalChange({ id, label, checked, onChange, children }: {
+  id: string
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  children: ReactNode
+}) {
+  return (
+    <div className="grid gap-3 rounded-lg border bg-muted/20 p-3">
+      <label htmlFor={id} className="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium">
+        {label}
+        <Switch id={id} checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      </label>
+      {checked && children}
+    </div>
+  )
 }
 
 export function BulkEditLinksDialog({ open, onOpenChange, ids, users, isAdmin, onSaved }: Props) {
@@ -59,25 +79,52 @@ export function BulkEditLinksDialog({ open, onOpenChange, ids, users, isAdmin, o
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Edit {ids.length} links</DialogTitle><DialogDescription>Only fields selected or filled below will change.</DialogDescription></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Edit {ids.length} link{ids.length === 1 ? '' : 's'}</DialogTitle>
+          <DialogDescription>Only the fields you fill in or switch on will change.</DialogDescription>
+        </DialogHeader>
         <form onSubmit={submit} className="grid gap-4">
-          <div className="grid gap-2"><Label htmlFor="bulk-status">Status</Label><select id="bulk-status" className="h-9 rounded-md border bg-background px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">No change</option><option value="active">Active</option><option value="paused">Paused</option></select></div>
           <div className="grid gap-2">
-            <label className="flex items-center gap-2 text-sm"><Checkbox checked={changeStarts} onChange={() => setChangeStarts(!changeStarts)} /> Change scheduled start</label>
-            {changeStarts && <Input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />}
-            {changeStarts && !startsAt && <p className="text-xs text-muted-foreground">Leaving this blank removes the scheduled start.</p>}
+            <Label htmlFor="bulk-status">Status</Label>
+            <Select id="bulk-status" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">No change</option>
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+            </Select>
           </div>
-          <div className="grid gap-2">
-            <label className="flex items-center gap-2 text-sm"><Checkbox checked={changeExpiry} onChange={() => setChangeExpiry(!changeExpiry)} /> Change expiry</label>
-            {changeExpiry && <Input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />}
-            {changeExpiry && !expiresAt && <p className="text-xs text-muted-foreground">Leaving this blank removes the expiry.</p>}
+          <OptionalChange id="bulk-starts" label="Change scheduled start" checked={changeStarts} onChange={setChangeStarts}>
+            <Input type="datetime-local" aria-label="Scheduled start" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
+            {!startsAt && <p className="text-xs text-muted-foreground">Leaving this blank removes the scheduled start.</p>}
+          </OptionalChange>
+          <OptionalChange id="bulk-expiry" label="Change expiry" checked={changeExpiry} onChange={setChangeExpiry}>
+            <Input type="datetime-local" aria-label="Expiry" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
+            {!expiresAt && <p className="text-xs text-muted-foreground">Leaving this blank removes the expiry.</p>}
+          </OptionalChange>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="add-tags">Add tags</Label>
+              <Input id="add-tags" placeholder="campaign, q4" value={addTags} onChange={(event) => setAddTags(event.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="remove-tags">Remove tags</Label>
+              <Input id="remove-tags" placeholder="draft" value={removeTags} onChange={(event) => setRemoveTags(event.target.value)} />
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2"><Label htmlFor="add-tags">Add tags</Label><Input id="add-tags" placeholder="campaign, q4" value={addTags} onChange={(event) => setAddTags(event.target.value)} /></div>
-            <div className="grid gap-2"><Label htmlFor="remove-tags">Remove tags</Label><Input id="remove-tags" placeholder="draft" value={removeTags} onChange={(event) => setRemoveTags(event.target.value)} /></div>
-          </div>
-          {isAdmin && <div className="grid gap-2"><Label htmlFor="owner">Transfer ownership</Label><select id="owner" className="h-9 rounded-md border bg-background px-3 text-sm" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="">No change</option>{users.filter((user) => !user.deactivatedAt && user.role !== 'guest').map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select></div>}
-          <DialogFooter><Button type="submit" disabled={loading}>{loading ? 'Updating…' : 'Apply changes'}</Button></DialogFooter>
+          {isAdmin && (
+            <div className="grid gap-2">
+              <Label htmlFor="owner">Transfer ownership</Label>
+              <Select id="owner" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
+                <option value="">No change</option>
+                {users.filter((user) => !user.deactivatedAt && user.role !== 'guest').map((user) => (
+                  <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                ))}
+              </Select>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Updating…' : 'Apply changes'}</Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

@@ -1,7 +1,9 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowRightLeft, Eye, Plus, ShieldMinus, ShieldPlus, Trash2, UserCheck, UserX, Users } from 'lucide-react'
+import {
+  ArrowRightLeft, Eye, MoreHorizontal, Plus, ShieldMinus, ShieldPlus, Trash2, UserCheck, UserX,
+} from 'lucide-react'
 import { authClient } from '~/lib/auth-client'
 import {
   createGuest, createUser, deactivateUser, deleteUser, listUsers, reactivateUser, setGuestAccess, setUserRole,
@@ -10,12 +12,15 @@ import {
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
-import { Badge } from '~/components/ui/badge'
 import { Checkbox } from '~/components/ui/checkbox'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '~/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { LocalTime } from '~/components/local-time'
+import { PageHeader, Stat, StatGrid } from '~/components/page-header'
+import { cn } from '~/lib/utils'
 
 export const Route = createFileRoute('/dashboard/users')({
   beforeLoad: ({ context }) => {
@@ -126,160 +131,213 @@ function UsersPage() {
     }
   }
 
+  const admins = users.filter((u) => u.role === 'admin' && !u.deactivatedAt).length
+  const guests = users.filter((u) => u.role === 'guest').length
+  const deactivated = users.filter((u) => u.deactivatedAt).length
+  const without2fa = users.filter((u) => !u.twoFactorEnabled && !u.deactivatedAt && u.role !== 'guest').length
+
   return (
-    <div className="grid max-w-3xl gap-6">
-      <h1 className="text-xl font-semibold">Users</h1>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" /> Team members
-          </CardTitle>
-          <CardDescription>
-            Admins can manage members and invite new ones. New members should enable 2FA on first login.
-            Deactivate admins who leave; deleting a user moves their links to you.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>2FA</TableHead>
-                <TableHead className="text-right">Links</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead className="w-[140px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((u) => (
-                <TableRow key={u.id} className={u.deactivatedAt ? 'text-muted-foreground' : undefined}>
-                  <TableCell>
-                    {u.name} {u.id === myId && <Badge variant="secondary" className="ml-1">you</Badge>}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {u.email}
-                    {u.username && <div className="text-xs">@{u.username}</div>}
-                  </TableCell>
-                  <TableCell>
-                    {u.role === 'admin'
-                      ? <Badge>admin</Badge>
-                      : u.role === 'guest'
-                        ? <Badge variant="secondary" title={guestAccessLabel(u, users)}>guest · {u.guestOwnerIds.length} account{u.guestOwnerIds.length === 1 ? '' : 's'}</Badge>
-                        : <Badge variant="outline">user</Badge>}
-                    {u.deactivatedAt && <Badge variant="secondary" className="ml-1">deactivated</Badge>}
-                  </TableCell>
-                  <TableCell>
-                    {u.twoFactorEnabled ? <Badge>on</Badge> : <Badge variant="outline">off</Badge>}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">{u.linkCount}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    <LocalTime value={u.createdAt} dateOnly />
-                  </TableCell>
-                  <TableCell>
-                    {u.id !== myId && (
-                      <div className="flex gap-1">
-                        {u.linkCount > 0 && (
-                          <Button variant="ghost" size="icon" title="Take over links" onClick={() => takeOver(u.id, u.email, u.linkCount)}>
-                            <ArrowRightLeft />
-                          </Button>
-                        )}
-                        {u.role === 'guest' && (
-                          <Button variant="ghost" size="icon" title="Change which accounts this guest can view" onClick={() => setAccessFor(u)}>
-                            <Eye />
-                          </Button>
-                        )}
-                        {!u.deactivatedAt && u.role !== 'guest' && (
-                          <Button
-                            variant="ghost" size="icon"
-                            title={u.role === 'admin' ? 'Revoke admin' : 'Make admin'}
-                            onClick={() => toggleRole(u.id, u.email, u.role)}
-                          >
-                            {u.role === 'admin'
-                              ? <ShieldMinus className="text-orange-500" />
-                              : <ShieldPlus className="text-emerald-500" />}
-                          </Button>
-                        )}
-                        {u.deactivatedAt ? (
-                          <Button variant="ghost" size="icon" title="Reactivate account" onClick={() => reactivate(u.id)}>
-                            <UserCheck className="text-emerald-500" />
-                          </Button>
-                        ) : u.role === 'admin' && (
-                          <Button variant="ghost" size="icon" title="Deactivate admin" onClick={() => deactivate(u.id, u.email)}>
-                            <UserX className="text-orange-500" />
-                          </Button>
-                        )}
-                        {(u.role !== 'admin' || u.deactivatedAt) && (
-                          <Button variant="ghost" size="icon" title="Delete account" onClick={() => remove(u.id, u.email, u.linkCount)}>
-                            <Trash2 className="text-destructive" />
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-              <Plus /> Add member
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setGuestOpen(true)}>
+    <div className="grid grid-cols-1 gap-6">
+      <PageHeader
+        title="Users"
+        description="Invite members, share read-only guest access, and hand over links when someone leaves."
+        actions={
+          <>
+            <Button variant="outline" className="flex-1 bg-background sm:flex-none" onClick={() => setGuestOpen(true)}>
               <Eye /> Add guest
             </Button>
-          </div>
+            <Button className="flex-1 sm:flex-none" onClick={() => setOpen(true)}>
+              <Plus /> Add member
+            </Button>
+          </>
+        }
+      />
 
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add a team member</DialogTitle>
-                <DialogDescription>
-                  They can change their password after signing in. Share these credentials securely.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={add} className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="member-name">Name</Label>
-                  <Input id="member-name" value={name} onChange={(e) => setName(e.target.value)} required />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="member-email">Email</Label>
-                  <Input id="member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                </div>
-                <UsernameField id="member-username" value={username} onChange={setUsername} />
-                <div className="grid gap-2">
-                  <Label htmlFor="member-password">Temporary password</Label>
-                  <Input
-                    id="member-password" type="password" minLength={12} maxLength={128}
-                    value={password} onChange={(e) => setPassword(e.target.value)} required
-                  />
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={loading}>{loading ? 'Creating…' : 'Create account'}</Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+      <StatGrid label="Summary" className="sm:grid-cols-4">
+        <Stat label="Accounts" value={users.length} hint={deactivated ? `${deactivated} deactivated` : 'All active'} />
+        <Stat label="Admins" value={admins} hint="Can manage users" />
+        <Stat label="Guests" value={guests} hint="Read-only access" />
+        <Stat label="Without 2FA" value={without2fa} hint="Members and admins" />
+      </StatGrid>
 
-          <GuestDialog
-            open={guestOpen}
-            onOpenChange={setGuestOpen}
-            owners={owners}
-            onSaved={() => router.invalidate()}
-          />
-          <GuestDialog
-            open={Boolean(accessFor)}
-            onOpenChange={(next) => { if (!next) setAccessFor(null) }}
-            owners={owners}
-            guest={accessFor}
-            onSaved={() => router.invalidate()}
-          />
-        </CardContent>
-      </Card>
+      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <Table>
+          <TableHeader className="bg-muted/40">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="pl-4">User</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead className="hidden sm:table-cell">2FA</TableHead>
+              <TableHead className="hidden text-right md:table-cell">Links</TableHead>
+              <TableHead className="hidden lg:table-cell">Joined</TableHead>
+              <TableHead className="w-12 pr-4"><span className="sr-only">Actions</span></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.map((u) => (
+              <TableRow key={u.id} className={cn(u.deactivatedAt && 'text-muted-foreground')}>
+                <TableCell className="w-full max-w-0 pl-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'grid size-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold uppercase text-secondary-foreground',
+                        u.deactivatedAt && 'opacity-50',
+                      )}
+                    >
+                      {(u.name || u.email).slice(0, 1)}
+                    </span>
+                    <div className="grid min-w-0">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate font-medium">{u.name}</span>
+                        {u.id === myId && <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium">You</span>}
+                      </div>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {u.email}{u.username && ` · @${u.username}`}
+                      </span>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="grid justify-items-start gap-1">
+                    <RolePill user={u} users={users} />
+                    {u.deactivatedAt && <span className="text-xs text-muted-foreground">Deactivated</span>}
+                  </div>
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  {u.role === 'guest' ? <span className="text-xs text-muted-foreground">—</span> : <Pill on={Boolean(u.twoFactorEnabled)}>{u.twoFactorEnabled ? 'On' : 'Off'}</Pill>}
+                </TableCell>
+                <TableCell className="hidden text-right tabular-nums md:table-cell">{u.linkCount.toLocaleString('en-US')}</TableCell>
+                <TableCell className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">
+                  <LocalTime value={u.createdAt} dateOnly />
+                </TableCell>
+                <TableCell className="pr-4">
+                  {u.id !== myId && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label={`Actions for ${u.email}`}>
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-56">
+                        {u.role === 'guest' && (
+                          <DropdownMenuItem onSelect={() => setAccessFor(u)}><Eye /> Change access</DropdownMenuItem>
+                        )}
+                        {u.linkCount > 0 && (
+                          <DropdownMenuItem onSelect={() => takeOver(u.id, u.email, u.linkCount)}>
+                            <ArrowRightLeft /> Take over {plural(u.linkCount)}
+                          </DropdownMenuItem>
+                        )}
+                        {!u.deactivatedAt && u.role !== 'guest' && (
+                          <DropdownMenuItem onSelect={() => toggleRole(u.id, u.email, u.role)}>
+                            {u.role === 'admin' ? <><ShieldMinus /> Revoke admin</> : <><ShieldPlus /> Make admin</>}
+                          </DropdownMenuItem>
+                        )}
+                        {u.deactivatedAt ? (
+                          <DropdownMenuItem onSelect={() => reactivate(u.id)}><UserCheck /> Reactivate</DropdownMenuItem>
+                        ) : u.role === 'admin' && (
+                          <DropdownMenuItem onSelect={() => deactivate(u.id, u.email)}><UserX /> Deactivate</DropdownMenuItem>
+                        )}
+                        {(u.role !== 'admin' || u.deactivatedAt) && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem destructive onSelect={() => remove(u.id, u.email, u.linkCount)}>
+                              <Trash2 /> Delete account
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        New members should turn on 2FA at first sign-in; admins must. Deactivate admins who leave. Deleting a user moves their links to you.
+      </p>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a team member</DialogTitle>
+            <DialogDescription>
+              They can change their password after signing in. Share these credentials securely.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={add} className="grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="member-name">Name</Label>
+                <Input id="member-name" value={name} onChange={(e) => setName(e.target.value)} required />
+              </div>
+              <UsernameField id="member-username" value={username} onChange={setUsername} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="member-email">Email</Label>
+              <Input id="member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="member-password">Temporary password</Label>
+              <Input
+                id="member-password" type="password" minLength={12} maxLength={128}
+                value={password} onChange={(e) => setPassword(e.target.value)} required
+              />
+              <p className="text-xs text-muted-foreground">At least 12 characters. They’re asked to change it at first sign-in.</p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={loading}>{loading ? 'Creating…' : 'Create account'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <GuestDialog
+        open={guestOpen}
+        onOpenChange={setGuestOpen}
+        owners={owners}
+        onSaved={() => router.invalidate()}
+      />
+      <GuestDialog
+        open={Boolean(accessFor)}
+        onOpenChange={(next) => { if (!next) setAccessFor(null) }}
+        owners={owners}
+        guest={accessFor}
+        onSaved={() => router.invalidate()}
+      />
     </div>
   )
+}
+
+const PILL_TONES = {
+  admin: 'bg-violet-500/10 text-violet-700 ring-violet-600/20 dark:text-violet-300 dark:ring-violet-400/20',
+  on: 'bg-emerald-500/10 text-emerald-700 ring-emerald-600/20 dark:text-emerald-400 dark:ring-emerald-400/20',
+  neutral: 'bg-muted text-muted-foreground ring-border',
+}
+
+function Pill({ on, tone, title, children }: { on?: boolean; tone?: keyof typeof PILL_TONES; title?: string; children: React.ReactNode }) {
+  return (
+    <span
+      title={title}
+      className={cn(
+        'inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+        PILL_TONES[tone ?? (on ? 'on' : 'neutral')],
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+function RolePill({ user: u, users }: { user: UserRow; users: UserRow[] }) {
+  if (u.role === 'admin') return <Pill tone="admin">Admin</Pill>
+  if (u.role === 'guest') {
+    const n = u.guestOwnerIds.length
+    return <Pill title={guestAccessLabel(u, users)}>Guest · {n} account{n === 1 ? '' : 's'}</Pill>
+  }
+  return <Pill>Member</Pill>
 }
 
 function UsernameField({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
@@ -361,18 +419,20 @@ function GuestDialog({ open, onOpenChange, owners, guest, onSaved }: {
             They can't change anything, including their own password, so the credentials are safe to share for a demo.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="grid gap-3">
+        <form onSubmit={submit} className="grid gap-4">
           {!guest && (
             <>
-              <div className="grid gap-2">
-                <Label htmlFor="guest-name">Name</Label>
-                <Input id="guest-name" value={name} onChange={(e) => setName(e.target.value)} required />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="guest-name">Name</Label>
+                  <Input id="guest-name" value={name} onChange={(e) => setName(e.target.value)} required />
+                </div>
+                <UsernameField id="guest-username" value={username} onChange={setUsername} />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="guest-email">Email</Label>
                 <Input id="guest-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
-              <UsernameField id="guest-username" value={username} onChange={setUsername} />
               <div className="grid gap-2">
                 <Label htmlFor="guest-password">Password</Label>
                 <Input
@@ -384,18 +444,21 @@ function GuestDialog({ open, onOpenChange, owners, guest, onSaved }: {
           )}
           <div className="grid gap-2">
             <Label>Accounts this guest can view</Label>
-            <div className="grid max-h-56 gap-2 overflow-y-auto rounded-md border p-3">
+            <div className="max-h-56 divide-y overflow-y-auto rounded-lg border">
               {owners.map((owner) => (
-                <label key={owner.id} className="flex items-center gap-2 text-sm">
+                <label key={owner.id} className="flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-muted/40">
                   <Checkbox checked={ownerIds.has(owner.id)} onChange={() => toggle(owner.id)} />
-                  <span>{owner.name}</span>
-                  <span className="text-muted-foreground">{owner.email}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{plural(owner.linkCount)}</span>
+                  <span className="grid min-w-0 flex-1">
+                    <span className="truncate font-medium">{owner.name}</span>
+                    <span className="truncate text-xs text-muted-foreground">{owner.email}</span>
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{plural(owner.linkCount)}</span>
                 </label>
               ))}
             </div>
           </div>
           <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={loading}>
               {loading ? 'Saving…' : guest ? 'Save access' : 'Create guest'}
             </Button>

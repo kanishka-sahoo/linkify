@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import { getBootstrap } from '~/lib/session'
 import { authClient } from '~/lib/auth-client'
 import { ThemeToggle } from '~/components/theme-toggle'
+import { BrandMark } from '~/components/auth-shell'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
@@ -50,9 +51,7 @@ function DashboardLayout() {
       <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4 sm:px-6">
           <Link to="/dashboard" className="mr-4 flex items-center gap-2 rounded-md font-semibold tracking-tight">
-            <span className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Link2 className="size-4" />
-            </span>
+            <BrandMark className="size-7" />
             Linkify
           </Link>
 
