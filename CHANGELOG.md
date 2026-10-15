@@ -10,6 +10,10 @@ commits that shipped them; the dates below are the original commit dates.
 ## [Unreleased]
 
 ### Added
+- Sign in with a username as well as an email. Set one under **Settings →
+  Username**, or have an admin set it when creating a member or guest.
+  Usernames are 3–30 letters, numbers, underscores, or dots, and are matched
+  case-insensitively. Run the `0007_usernames` migration before deploying
 - Read-only guest accounts for sharing demo credentials. Admins create them
   under **Users → Add guest** and choose which accounts' links and analytics
   they can view. Guests can't change links, their own password, 2FA, passkeys,

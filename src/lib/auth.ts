@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { twoFactor } from 'better-auth/plugins'
+import { twoFactor, username } from 'better-auth/plugins'
 import { passkey } from '@better-auth/passkey'
 import { db } from './db'
 import { user } from './schema'
@@ -42,6 +42,8 @@ export const auth = betterAuth({
       deactivatedAt: { type: 'date', required: false, input: false },
     },
   },
+  // Public username lookups would let anyone enumerate accounts.
+  disabledPaths: ['/is-username-available'],
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 12,
@@ -59,6 +61,7 @@ export const auth = betterAuth({
     modelName: 'authRateLimit',
     customRules: {
       '/sign-in/email': { window: 60, max: 5 },
+      '/sign-in/username': { window: 60, max: 5 },
       '/sign-up/email': { window: 60 * 15, max: 5 },
       '/two-factor/*': { window: 60, max: 5 },
       '/passkey/*': { window: 60, max: 10 },
@@ -82,6 +85,7 @@ export const auth = betterAuth({
     after: createAuthMiddleware(async (ctx) => {
       const tracked = new Map<string, string>([
         ['/sign-in/email', 'auth.sign_in'],
+        ['/sign-in/username', 'auth.sign_in'],
         ['/sign-up/email', 'auth.sign_up'],
         ['/change-password', 'auth.password_change'],
         ['/two-factor/enable', 'auth.two_factor_enable'],
@@ -101,12 +105,16 @@ export const auth = betterAuth({
         context.newSession?.user?.id ?? context.session?.user?.id ?? context.session?.userId ?? null
       const returned = context.returned
       const failed = returned instanceof Error || (returned instanceof Response && returned.status >= 400)
-      const email = (ctx.body as { email?: unknown } | undefined)?.email
+      const body = ctx.body as { email?: unknown; username?: unknown } | undefined
+      const [targetType, login] =
+        typeof body?.email === 'string' ? ['email', body.email]
+          : typeof body?.username === 'string' ? ['username', body.username]
+            : [null, null]
       await auditEvent({
         action: `${baseAction}.${failed ? 'failed' : 'succeeded'}`,
         actorUserId,
-        targetType: typeof email === 'string' ? 'email' : null,
-        targetId: typeof email === 'string' ? email.trim().toLowerCase() : null,
+        targetType,
+        targetId: login?.trim().toLowerCase() ?? null,
         headers: ctx.headers,
       })
     }),
@@ -126,6 +134,8 @@ export const auth = betterAuth({
   },
   plugins: [
     twoFactor(),
+    // Usernames can't contain '@', so the login form tells them apart from emails.
+    username(),
     passkey({
       rpName: process.env.PASSKEY_RP_NAME ?? 'Linkify',
     }),

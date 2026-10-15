@@ -22,6 +22,10 @@ export const user = pgTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     email: text('email').notNull().unique(),
+    // better-auth username plugin: optional sign-in alternative to email,
+    // stored lowercased; displayUsername keeps the casing as typed.
+    username: text('username').unique(),
+    displayUsername: text('display_username'),
     emailVerified: boolean('email_verified').notNull().default(false),
     image: text('image'),
     role: text('role').notNull().default('user'),

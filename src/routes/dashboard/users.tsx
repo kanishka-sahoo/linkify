@@ -39,6 +39,7 @@ function UsersPage() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [guestOpen, setGuestOpen] = useState(false)
@@ -53,11 +54,12 @@ function UsersPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await createUser({ data: { name, email, password } })
+      await createUser({ data: { name, email, username, password } })
       toast.success(`Account created for ${email}`)
       setOpen(false)
       setName('')
       setEmail('')
+      setUsername('')
       setPassword('')
       router.invalidate()
     } catch (err) {
@@ -156,7 +158,10 @@ function UsersPage() {
                   <TableCell>
                     {u.name} {u.id === myId && <Badge variant="secondary" className="ml-1">you</Badge>}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {u.email}
+                    {u.username && <div className="text-xs">@{u.username}</div>}
+                  </TableCell>
                   <TableCell>
                     {u.role === 'admin'
                       ? <Badge>admin</Badge>
@@ -243,6 +248,7 @@ function UsersPage() {
                   <Label htmlFor="member-email">Email</Label>
                   <Input id="member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
+                <UsernameField id="member-username" value={username} onChange={setUsername} />
                 <div className="grid gap-2">
                   <Label htmlFor="member-password">Temporary password</Label>
                   <Input
@@ -276,6 +282,19 @@ function UsersPage() {
   )
 }
 
+function UsernameField({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>Username <span className="font-normal text-muted-foreground">(optional)</span></Label>
+      <Input
+        id={id} autoComplete="off" autoCapitalize="none" spellCheck={false}
+        minLength={3} maxLength={30} pattern="[A-Za-z0-9_.]+" title="Letters, numbers, underscores and dots"
+        value={value} onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  )
+}
+
 function guestAccessLabel(guest: UserRow, users: UserRow[]) {
   const emails = users.filter((u) => guest.guestOwnerIds.includes(u.id)).map((u) => u.email)
   return emails.length ? `Can view links of ${emails.join(', ')}` : 'Can view nothing yet'
@@ -291,6 +310,7 @@ function GuestDialog({ open, onOpenChange, owners, guest, onSaved }: {
 }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [ownerIds, setOwnerIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
@@ -299,6 +319,7 @@ function GuestDialog({ open, onOpenChange, owners, guest, onSaved }: {
     if (!open) return
     setName('')
     setEmail('')
+    setUsername('')
     setPassword('')
     setOwnerIds(new Set(guest?.guestOwnerIds ?? []))
   }, [open, guest])
@@ -318,7 +339,7 @@ function GuestDialog({ open, onOpenChange, owners, guest, onSaved }: {
         await setGuestAccess({ data: { id: guest.id, ownerIds: [...ownerIds] } })
         toast.success('Guest access updated')
       } else {
-        await createGuest({ data: { name, email, password, ownerIds: [...ownerIds] } })
+        await createGuest({ data: { name, email, username, password, ownerIds: [...ownerIds] } })
         toast.success(`Guest account created for ${email}`)
       }
       onOpenChange(false)
@@ -351,6 +372,7 @@ function GuestDialog({ open, onOpenChange, owners, guest, onSaved }: {
                 <Label htmlFor="guest-email">Email</Label>
                 <Input id="guest-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
+              <UsernameField id="guest-username" value={username} onChange={setUsername} />
               <div className="grid gap-2">
                 <Label htmlFor="guest-password">Password</Label>
                 <Input

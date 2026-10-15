@@ -37,6 +37,7 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
       sessions: [],
       securityEvents: [],
       twoFactorEnabled: false,
+      username: null,
       mustChangePassword: false,
       twoFactorRequired: false,
     }
@@ -80,7 +81,11 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
       })
       .from(auditLogs)
       .where(and(
-        or(eq(auditLogs.actorUserId, current.user.id), eq(auditLogs.targetId, current.user.email)),
+        or(
+          eq(auditLogs.actorUserId, current.user.id),
+          eq(auditLogs.targetId, current.user.email),
+          current.user.username ? eq(auditLogs.targetId, current.user.username) : undefined,
+        ),
         or(
           like(auditLogs.action, 'auth.%'),
           like(auditLogs.action, 'api_key.%'),
@@ -97,6 +102,7 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
     sessions: sessions.map((row) => ({ ...row, current: row.id === current.session.id })),
     securityEvents,
     twoFactorEnabled: Boolean(current.user.twoFactorEnabled),
+    username: current.user.displayUsername ?? null,
     mustChangePassword: Boolean(current.user.mustChangePassword),
     // Mirrors the dashboard guard: admins can't leave settings until they enroll TOTP.
     twoFactorRequired: current.user.role === 'admin' && !current.user.twoFactorEnabled,
