@@ -15,6 +15,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '~
 import { NotFound, RouteError } from '~/components/route-status'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '~/components/ui/chart'
 import { LocalTime } from '~/components/local-time'
+import { LinkSettings } from '~/components/link-details'
+import { StatusBadge, linkState } from '~/components/link-status'
 
 const RANGES = [
   { label: '7d', days: 7 },
@@ -69,40 +71,50 @@ function AnalyticsPage() {
     rows.map((r) => ({ label: label(r.name), count: r.count }))
 
   return (
-    <div className={`grid gap-6 ${loading ? 'opacity-60 transition-opacity' : ''}`}>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/dashboard"><ArrowLeft /></Link>
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h1 className="font-mono text-xl font-semibold">/{link.code}</h1>
-            {link.passwordProtected && <Lock className="h-4 w-4 text-muted-foreground" />}
-            {link.privacyEnabled && <Badge variant="secondary">privacy</Badge>}
-            <Button
-              variant="ghost" size="icon" title="Copy short URL"
-              onClick={async () => {
-                await navigator.clipboard.writeText(`${window.location.origin}/${link.code}`)
-                toast.success('Copied')
-              }}
-            >
-              <Copy />
-            </Button>
+    <div className={`grid grid-cols-1 gap-6 ${loading ? 'opacity-60 transition-opacity' : ''}`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex min-w-0 items-start gap-2">
+          <Button variant="ghost" size="icon" className="-ml-2 shrink-0" asChild>
+            <Link to="/dashboard" aria-label="Back to links"><ArrowLeft /></Link>
+          </Button>
+          <div className="grid min-w-0 gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate font-mono text-2xl font-semibold tracking-tight">/{link.code}</h1>
+              <Button
+                variant="ghost" size="icon" className="size-8 text-muted-foreground" title="Copy short URL"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(`${window.location.origin}/${link.code}`)
+                  toast.success('Copied')
+                }}
+              >
+                <Copy />
+              </Button>
+              <StatusBadge state={linkState(link)} />
+              {link.passwordProtected && <Badge variant="outline" className="gap-1 font-medium"><Lock className="size-3" /> Password</Badge>}
+              {link.privacyEnabled && <Badge variant="outline" className="font-medium">Privacy mode</Badge>}
+            </div>
+            {link.title && <p className="text-sm">{link.title}</p>}
+            <a href={link.url} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:underline">
+              <span className="truncate">{link.url}</span> <ExternalLink className="size-3 shrink-0" />
+            </a>
           </div>
-          <a href={link.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sm text-muted-foreground hover:underline">
-            {link.url} <ExternalLink className="h-3 w-3" />
-          </a>
         </div>
-        <div className="flex gap-1">
+        <div role="group" aria-label="Date range" className="inline-flex shrink-0 gap-0.5 self-start rounded-lg border bg-muted/60 p-0.5 lg:self-auto">
           {RANGES.map((r) => (
-            <Button key={r.days} variant={days === r.days ? 'default' : 'outline'} size="sm" onClick={() => changeRange(r.days)}>
+            <button
+              key={r.days}
+              type="button"
+              aria-pressed={days === r.days}
+              onClick={() => changeRange(r.days)}
+              className={`h-8 cursor-pointer rounded-md px-3 text-sm font-medium transition-colors ${days === r.days ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
               {r.label}
-            </Button>
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border shadow-sm sm:grid-cols-5">
         <Stat label="Total clicks" value={link.clickCount} />
         <Stat label={`Clicks (${days}d)`} value={total} />
         <Stat label="Humans" value={human} />
@@ -130,6 +142,16 @@ function AnalyticsPage() {
               </AreaChart>
             </ChartContainer>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Link settings</CardTitle>
+          <CardDescription>How this link behaves for visitors: its schedule, limits, and protection.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <LinkSettings link={link} className="lg:grid-cols-3 lg:gap-8" />
         </CardContent>
       </Card>
 
@@ -171,14 +193,10 @@ function AnalyticsPage() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <Card>
-      <CardHeader className="p-4 pb-1">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent className="p-4 pt-0">
-        <div className="text-2xl font-bold tabular-nums">{value.toLocaleString('en-US')}</div>
-      </CardContent>
-    </Card>
+    <div className="grid gap-1 bg-card p-4 first:col-span-2 sm:p-5 sm:first:col-span-1">
+      <div className="text-sm font-medium text-muted-foreground">{label}</div>
+      <div className="text-2xl font-semibold tracking-tight tabular-nums">{value.toLocaleString('en-US')}</div>
+    </div>
   )
 }
 

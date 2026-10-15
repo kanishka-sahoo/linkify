@@ -30,7 +30,7 @@ describe('server-rendered dates', { skip }, () => {
     const html = await res.text()
     const today = new Date().toISOString().slice(0, 10)
     assert.match(html, new RegExp(`<time dateTime="${today}T[^"]+">${today}</time>`))
-    assert.match(html, /expires <time dateTime="2099-02-09T12:00:00.000Z" title="2099-02-09 12:00 UTC">2099-02-09<\/time>/)
+    assert.match(html, /Expires <time dateTime="2099-02-09T12:00:00.000Z" title="2099-02-09 12:00 UTC">2099-02-09<\/time>/)
     assert.doesNotMatch(html, /\d{1,2}\/\d{1,2}\/\d{4}/, 'no locale-formatted dates')
   })
 })

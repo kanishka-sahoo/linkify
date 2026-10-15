@@ -45,7 +45,8 @@ function RootComponent() {
 
 function RootDocument({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // The inline theme script sets class="dark" before hydration.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
