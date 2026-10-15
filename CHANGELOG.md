@@ -10,6 +10,13 @@ commits that shipped them; the dates below are the original commit dates.
 ## [Unreleased]
 
 ### Added
+- Link details panel: open any link on the dashboard to see its status,
+  schedule, expiry, click limit and usage, fallback URL, password and privacy
+  settings, tags, owner, and timestamps. Read-only guests can see it too, so
+  shared demo accounts show how each link is configured. The analytics page
+  shows the same settings in a **Link settings** card
+- A simple home page at `/` with a link to sign in or open the dashboard,
+  instead of an immediate redirect
 - Sign in with a username as well as an email. Set one under **Settings →
   Username**, or have an admin set it when creating a member or guest.
   Usernames are 3–30 letters, numbers, underscores, or dots, and are matched
@@ -42,6 +49,10 @@ commits that shipped them; the dates below are the original commit dates.
   scopes, ownership, concurrent click caps and password lockouts, privacy mode (#12)
 
 ### Changed
+- Redesigned the links dashboard for clarity and small screens: status and
+  click-limit columns, status filters with counts, a row actions menu, a card
+  layout on phones, a floating bulk-action bar, and a sticky header with an
+  account menu
 - REST link create/update/delete moved into a service shared with the MCP
   server. `PATCH /api/v1/links/:id` now returns 404 instead of 409 when
   renaming another user's link onto a taken code (#1)
@@ -54,6 +65,9 @@ commits that shipped them; the dates below are the original commit dates.
   they can be deleted (#50)
 
 ### Fixed
+- Dark mode no longer causes a hydration mismatch that re-rendered the whole
+  page on load
+- Sorting links by created date compares dates rather than their text form
 - Changing a temporary password no longer signs the user out; the current
   session is kept, other sessions are still revoked, and the user continues to
   the dashboard (#47)

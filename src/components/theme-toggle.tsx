@@ -13,36 +13,32 @@ function apply(theme: Theme) {
     theme === 'dark' ||
     (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   document.documentElement.classList.toggle('dark', dark)
+  return dark
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('system')
+  // Unknown during SSR (the theme lives in localStorage), so it's read after mount.
+  const [isDark, setIsDark] = useState<boolean | null>(null)
 
   useEffect(() => {
-    const t = getStored()
-    setTheme(t)
+    setIsDark(document.documentElement.classList.contains('dark'))
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = () => {
-      if (getStored() === 'system') apply('system')
+      if (getStored() === 'system') setIsDark(apply('system'))
     }
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)
   }, [])
 
-  const isDark =
-    typeof document !== 'undefined' &&
-    document.documentElement.classList.contains('dark')
-
   function toggle() {
     const next: Theme = isDark ? 'light' : 'dark'
     localStorage.setItem('theme', next)
-    setTheme(next)
-    apply(next)
+    setIsDark(apply(next))
   }
 
   return (
-    <Button variant="ghost" size="icon" onClick={toggle} title="Toggle dark mode">
-      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    <Button variant="ghost" size="icon" onClick={toggle} title="Toggle dark mode" aria-label="Toggle dark mode">
+      {isDark === null ? <span className="size-4" /> : isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
     </Button>
   )
 }
