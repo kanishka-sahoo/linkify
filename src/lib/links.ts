@@ -10,14 +10,14 @@ import { generateApiKey, hashPassword } from './keys'
 import { API_SCOPES, type ApiScope } from './api-scopes'
 import { hitLimit } from './ratelimit'
 import { auditEvent } from './audit'
-import { accountRestriction } from './account-policy'
+import { GUEST_READ_ONLY, accountRestriction, isGuest } from './account-policy'
 import {
   normalizeTags, parseLinkInput, safeLink, validateCode,
 } from './link-domain'
 import { getClickStats } from './stats'
 import { ownedByClause } from './link-access'
 import { overviewFor } from './link-service'
-import { parseClickLogCursor, parseClickLogFilter, queryClickLog } from './click-log'
+import { parseClickLogCursor, parseClickLogFilter, queryClickLog, withoutPersonalData } from './click-log'
 
 export {
   MAX_LINK_PASSWORD_LEN, getLinkAvailability, normalizeTags, parseLinkInput,
@@ -32,6 +32,13 @@ async function requireUser() {
   const restriction = accountRestriction(session.user)
   if (restriction) throw new Error(restriction)
   return session.user
+}
+
+/** requireUser() for anything that changes data; guests are read-only. */
+async function requireEditor() {
+  const user = await requireUser()
+  if (isGuest(user)) throw new Error(GUEST_READ_ONLY)
+  return user
 }
 
 const CREATE_LIMIT = 30
@@ -77,7 +84,7 @@ export const listLinks = createServerFn({ method: 'GET' }).handler(async () => {
 export const createLink = createServerFn({ method: 'POST' })
   .validator((input: unknown) => parseLinkInput(input))
   .handler(async ({ data }) => {
-    const user = await requireUser()
+    const user = await requireEditor()
     await enforceCreateLimit(user.id)
     const url = data.url
     const code = data.code ?? nanoid(7)
@@ -121,7 +128,7 @@ export const updateLink = createServerFn({ method: 'POST' })
     }
   })
   .handler(async ({ data }) => {
-    const user = await requireUser()
+    const user = await requireEditor()
     const owned = ownedByClause(user)
     const url = data.url
     const code = data.code!
@@ -170,7 +177,7 @@ export const updateLink = createServerFn({ method: 'POST' })
 export const deleteLink = createServerFn({ method: 'POST' })
   .validator((input: unknown) => ({ id: parseId(input) }))
   .handler(async ({ data }) => {
-    const user = await requireUser()
+    const user = await requireEditor()
     const owned = ownedByClause(user)
     const [row] = await db
       .delete(links)
@@ -187,7 +194,7 @@ export const deleteLink = createServerFn({ method: 'POST' })
 export const bulkDeleteLinks = createServerFn({ method: 'POST' })
   .validator((input: unknown) => ({ ids: parseIds(input) }))
   .handler(async ({ data }) => {
-    const user = await requireUser()
+    const user = await requireEditor()
     if (data.ids.length === 0) return { ok: true, count: 0 }
     const owned = ownedByClause(user)
     const rows = await db
@@ -204,7 +211,7 @@ export const bulkDeleteLinks = createServerFn({ method: 'POST' })
 export const bulkExpireLinks = createServerFn({ method: 'POST' })
   .validator((input: unknown) => ({ ids: parseIds(input) }))
   .handler(async ({ data }) => {
-    const user = await requireUser()
+    const user = await requireEditor()
     if (data.ids.length === 0) return { ok: true, count: 0 }
     const owned = ownedByClause(user)
     const rows = await db
@@ -252,15 +259,16 @@ export const bulkUpdateLinks = createServerFn({ method: 'POST' })
     return { ids, ...parsed, addTags, removeTags, ownerId: value.ownerId as string | undefined }
   })
   .handler(async ({ data }) => {
-    const actor = await requireUser()
+    const actor = await requireEditor()
     if (data.ids.length === 0) return { ok: true, count: 0 }
     if (data.ownerId && actor.role !== 'admin') throw new Error('Only admins can transfer ownership')
     if (data.ownerId) {
       const [owner] = await db
-        .select({ deactivatedAt: userTable.deactivatedAt })
+        .select({ role: userTable.role, deactivatedAt: userTable.deactivatedAt })
         .from(userTable)
         .where(eq(userTable.id, data.ownerId))
       if (!owner) throw new Error('Owner not found')
+      if (isGuest(owner)) throw new Error("Links can't be transferred to a guest account")
       if (owner.deactivatedAt) throw new Error("Links can't be transferred to a deactivated account")
     }
     const owned = ownedByClause(actor)
@@ -305,7 +313,7 @@ export const importLinks = createServerFn({ method: 'POST' })
     return { rows: value.rows as unknown[], conflict: value.conflict as ImportConflictMode }
   })
   .handler(async ({ data }) => {
-    const actor = await requireUser()
+    const actor = await requireEditor()
     const gate = await hitLimit(`import:${actor.id}`, 3, 60 * 60 * 1000)
     if (!gate.allowed) throw new Error('Import limit reached — try again later')
 
@@ -392,7 +400,7 @@ async function viewableLink(rawCode: string) {
     .from(links)
     .where(owned ? and(eq(links.code, code), owned) : eq(links.code, code))
   if (!link) throw notFound()
-  return link
+  return { link, user }
 }
 
 export const getLinkStats = createServerFn({ method: 'GET' })
@@ -404,7 +412,7 @@ export const getLinkStats = createServerFn({ method: 'GET' })
     }
   })
   .handler(async ({ data }) => {
-    const link = await viewableLink(data.code)
+    const { link } = await viewableLink(data.code)
     const days = Math.min(Math.max(data.days ?? 30, 1), 365)
     const stats = await getClickStats(link.id, days)
     const { country, referrer, browser, os, device } = stats.breakdowns
@@ -437,8 +445,10 @@ export const getClickLog = createServerFn({ method: 'GET' })
     }
   })
   .handler(async ({ data }) => {
-    const link = await viewableLink(data.code)
-    return queryClickLog(link.id, data.filter, data.cursor, CLICK_LOG_PAGE_SIZE)
+    const { link, user } = await viewableLink(data.code)
+    const page = await queryClickLog(link.id, data.filter, data.cursor, CLICK_LOG_PAGE_SIZE)
+    // Guest credentials are shared, so visitors' IPs and user agents stay private.
+    return isGuest(user) ? { ...page, clicks: page.clicks.map(withoutPersonalData) } : page
   })
 
 export const getOverview = createServerFn({ method: 'GET' }).handler(async () => {
@@ -463,7 +473,7 @@ export const createApiKey = createServerFn({ method: 'POST' })
     return { name: value.name, expiresInDays, scopes: [...new Set(scopes)] as ApiScope[] }
   })
   .handler(async ({ data }) => {
-    const user = await requireUser()
+    const user = await requireEditor()
     const [{ value: keyCount }] = await db
       .select({ value: sql<number>`count(*)::int` })
       .from(apiKeys)
@@ -494,7 +504,7 @@ export const deleteApiKey = createServerFn({ method: 'POST' })
     return { id }
   })
   .handler(async ({ data }) => {
-    const user = await requireUser()
+    const user = await requireEditor()
     await db.delete(apiKeys).where(and(eq(apiKeys.id, data.id), eq(apiKeys.userId, user.id)))
     await auditEvent({
       action: 'api_key.deleted', actorUserId: user.id, targetType: 'api_key', targetId: data.id,

@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm'
 import { isIP } from 'node:net'
 import { hitLimit } from './ratelimit'
 import type { ApiScope } from './api-scopes'
-import { accountRestriction } from './account-policy'
+import { accountRestriction, isGuest } from './account-policy'
 
 export function sha256(input: string) {
   return createHash('sha256').update(input).digest('hex')
@@ -46,6 +46,8 @@ export async function resolveApiKey(request: Request) {
     .where(eq(apiKeys.keyHash, hash))
   if (!row || !row.key.userId || !row.role || row.key.expiresAt <= new Date()) return null
   if (accountRestriction({ ...row, role: row.role })) return null
+  // Guests can't create keys; refuse any that exist anyway.
+  if (isGuest({ role: row.role })) return null
   const limit = await hitLimit(`api:${row.key.id}`, 600, 60 * 1000)
   if (!limit.allowed) return null
   db.update(apiKeys)

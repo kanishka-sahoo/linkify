@@ -3,6 +3,7 @@ import { Link2, Settings, LogOut, Users } from 'lucide-react'
 import { getBootstrap } from '~/lib/session'
 import { authClient } from '~/lib/auth-client'
 import { Button } from '~/components/ui/button'
+import { Badge } from '~/components/ui/badge'
 import { ThemeToggle } from '~/components/theme-toggle'
 
 export const Route = createFileRoute('/dashboard')({
@@ -57,16 +58,19 @@ function DashboardLayout() {
                 </span>
               </Link>
             )}
-            <Link
-              to="/dashboard/settings"
-              activeProps={{ className: 'text-foreground font-medium' }}
-              inactiveProps={{ className: 'text-muted-foreground hover:text-foreground' }}
-            >
-              <span className="flex items-center gap-1">
-                <Settings className="h-3.5 w-3.5" /> Settings
-              </span>
-            </Link>
+            {user.role !== 'guest' && (
+              <Link
+                to="/dashboard/settings"
+                activeProps={{ className: 'text-foreground font-medium' }}
+                inactiveProps={{ className: 'text-muted-foreground hover:text-foreground' }}
+              >
+                <span className="flex items-center gap-1">
+                  <Settings className="h-3.5 w-3.5" /> Settings
+                </span>
+              </Link>
+            )}
           </nav>
+          {user.role === 'guest' && <Badge variant="secondary">read-only</Badge>}
           <span className="hidden text-sm text-muted-foreground sm:block">{user.email}</span>
           <ThemeToggle />
           <Button variant="ghost" size="icon" onClick={onSignOut} title="Sign out">

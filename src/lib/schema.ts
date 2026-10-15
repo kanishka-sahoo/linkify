@@ -113,6 +113,23 @@ export const passkey = pgTable('passkey', {
 
 // ---------- app tables ----------
 
+/**
+ * Accounts whose links a guest (role 'guest') may view, read-only. A guest
+ * sees nothing that isn't listed here, including their own (they own none).
+ */
+export const guestAccess = pgTable(
+  'guest_access',
+  {
+    guestId: text('guest_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.guestId, t.ownerId] })],
+)
+
 export const links = pgTable(
   'links',
   {

@@ -9,6 +9,7 @@ A single-user / small-team link shortener with analytics, built on TanStack Star
 - **Short links** — random or custom codes, optional titles
 - **Tags** — up to 10 per link, with filter chips and tag search on the dashboard
 - **Teams & ownership** — role-based access (admin/user); non-admin users see and manage only their own links and stats, admins see everything with an owner column
+- **Guest accounts** — read-only logins for demos: an admin picks which accounts' links a guest can view. Guests can't create, edit, or delete anything, can't change their own password, 2FA, passkeys, or sessions, and can't create API keys, so the credentials are safe to share. Click logs hide visitor IP, city, and user agent from guests, and guests can't see other sessions on the shared account
 - **Lifecycle controls** — pause links, schedule activation, expire them, cap clicks, and optionally redirect inactive traffic to a fallback URL
 - **Password protection** — visitors must enter a password before being redirected; brute-force attempts are rate-limited (5 failures per link+IP locks for 15 min)
 - **Campaigns** — duplicate links, compose UTM parameters, and save campaign presets in the browser

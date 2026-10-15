@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from './db'
-import { clicks } from './schema'
+import { clicks, type Click } from './schema'
 import { csvCell } from './csv'
 
 export interface ClickLogFilter {
@@ -55,12 +55,17 @@ export async function queryClickLog(linkId: string, filter: ClickLogFilter, curs
   }
 }
 
+/** A click without the fields privacy mode omits: raw IP, city, and user agent. */
+export function withoutPersonalData(click: Click): Click {
+  return { ...click, ip: null, city: null, userAgent: null }
+}
+
 const CSV_COLUMNS = [
   'timestamp', 'outcome', 'country', 'city', 'referrer', 'browser', 'os', 'device', 'bot', 'ip', 'user_agent',
 ] as const
 
 /** Streams the whole filtered click log as CSV, reading it in batches. */
-export function clickLogCsv(linkId: string, filter: ClickLogFilter) {
+export function clickLogCsv(linkId: string, filter: ClickLogFilter, redact = false) {
   const encoder = new TextEncoder()
   let cursor: ClickLogCursor | undefined
   let started = false
@@ -71,7 +76,8 @@ export function clickLogCsv(linkId: string, filter: ClickLogFilter) {
         controller.enqueue(encoder.encode(`${CSV_COLUMNS.join(',')}\n`))
       }
       const page = await queryClickLog(linkId, filter, cursor, 1000)
-      const lines = page.clicks.map((c) => [
+      const rows = redact ? page.clicks.map(withoutPersonalData) : page.clicks
+      const lines = rows.map((c) => [
         c.timestamp.toISOString(), c.outcome, c.country, c.city, c.referrer, c.browser, c.os, c.deviceType,
         c.isBot, c.ip, c.userAgent,
       ].map(csvCell).join(','))

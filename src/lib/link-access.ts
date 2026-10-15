@@ -1,15 +1,20 @@
-import { and, eq } from 'drizzle-orm'
-import { links } from './schema'
+import { and, eq, sql } from 'drizzle-orm'
+import { guestAccess, links } from './schema'
+import { isGuest } from './account-policy'
 
 // Kept apart from link-service: client routes import links.ts, which re-exports
 // these, and link-service would pull node-only modules into the browser bundle.
 
 /**
  * WHERE clause restricting links to those the actor may see. Admins see
- * everything; everyone else only sees their own links.
+ * everything; guests see the accounts they were granted; everyone else only
+ * sees their own links. Write paths reject guests before using it.
  */
 export function ownedByClause(actor: { id: string; role: string }) {
   if (actor.role === 'admin') return undefined
+  if (isGuest(actor)) {
+    return sql`${links.userId} in (select ${guestAccess.ownerId} from ${guestAccess} where ${guestAccess.guestId} = ${actor.id})`
+  }
   return eq(links.userId, actor.id)
 }
 

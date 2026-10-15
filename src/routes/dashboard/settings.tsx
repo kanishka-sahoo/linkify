@@ -23,7 +23,7 @@ export const Route = createFileRoute('/dashboard/settings')({
 
 function SettingsPage() {
   const router = useRouter()
-  const { mustChangePassword, twoFactorRequired } = Route.useLoaderData()
+  const { guest, mustChangePassword, twoFactorRequired } = Route.useLoaderData()
 
   // Once the last requirement is met the rest of the app opens up; until then
   // the dashboard guard would just send the user back here.
@@ -32,6 +32,17 @@ function SettingsPage() {
     const wasRequired = requirement === 'password' ? mustChangePassword : twoFactorRequired
     if (wasRequired && !remaining) router.navigate({ to: '/dashboard' })
     else router.invalidate()
+  }
+
+  if (guest) {
+    return (
+      <div className="grid max-w-3xl gap-6">
+        <h1 className="text-xl font-semibold">Settings</h1>
+        <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+          This is a read-only guest account. Its password, security settings, and API access are managed by an administrator.
+        </div>
+      </div>
+    )
   }
 
   return (
