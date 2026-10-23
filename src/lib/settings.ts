@@ -1,9 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeaders } from '@tanstack/react-start/server'
+import { getRequestHeaders, getRequestUrl } from '@tanstack/react-start/server'
+import { resourceFor } from './oauth'
 import { and, desc, eq, like, ne, or } from 'drizzle-orm'
 import { auth } from './auth'
 import { db } from './db'
-import { apiKeys, auditLogs, passkey, session as sessionTable, user } from './schema'
+import { apiKeys, auditLogs, oauthClients, oauthGrants, passkey, session as sessionTable, user } from './schema'
 import { auditEvent } from './audit'
 import { GUEST_READ_ONLY, isGuest } from './account-policy'
 
@@ -33,6 +34,8 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
     return {
       guest: true,
       keys: [],
+      apps: [],
+      mcpUrl: '',
       passkeys: [],
       sessions: [],
       securityEvents: [],
@@ -42,7 +45,7 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
       twoFactorRequired: false,
     }
   }
-  const [keys, passkeys, sessions, securityEvents] = await Promise.all([
+  const [keys, apps, passkeys, sessions, securityEvents] = await Promise.all([
     db
       .select({
         id: apiKeys.id,
@@ -56,6 +59,18 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
       .from(apiKeys)
       .where(eq(apiKeys.userId, current.user.id))
       .orderBy(desc(apiKeys.createdAt)),
+    db
+      .select({
+        id: oauthGrants.id,
+        name: oauthClients.name,
+        scopes: oauthGrants.scopes,
+        createdAt: oauthGrants.createdAt,
+        lastUsedAt: oauthGrants.lastUsedAt,
+      })
+      .from(oauthGrants)
+      .innerJoin(oauthClients, eq(oauthGrants.clientId, oauthClients.id))
+      .where(eq(oauthGrants.userId, current.user.id))
+      .orderBy(desc(oauthGrants.createdAt)),
     db
       .select({ id: passkey.id, name: passkey.name, createdAt: passkey.createdAt })
       .from(passkey)
@@ -89,6 +104,7 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
         or(
           like(auditLogs.action, 'auth.%'),
           like(auditLogs.action, 'api_key.%'),
+          like(auditLogs.action, 'oauth.%'),
           like(auditLogs.action, 'admin.user.%'),
         ),
       ))
@@ -98,6 +114,8 @@ export const getSettingsData = createServerFn({ method: 'GET' }).handler(async (
   return {
     guest: false,
     keys,
+    apps,
+    mcpUrl: resourceFor(getRequestUrl().href),
     passkeys,
     sessions: sessions.map((row) => ({ ...row, current: row.id === current.session.id })),
     securityEvents,

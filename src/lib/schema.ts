@@ -231,6 +231,62 @@ export const apiKeys = pgTable('api_keys', {
   lastUsedAt: timestamp('last_used_at'),
 })
 
+/**
+ * OAuth clients that registered themselves (RFC 7591) to connect to the MCP
+ * server: Claude, ChatGPT, and other MCP hosts. Registration is open, so a
+ * client is only a name and its redirect URIs until a user approves it.
+ */
+export const oauthClients = pgTable('oauth_clients', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  redirectUris: text('redirect_uris').array().notNull(),
+  /** 'none' for public clients (PKCE only), or 'client_secret_basic' / 'client_secret_post'. */
+  authMethod: text('auth_method').notNull().default('none'),
+  secretHash: text('secret_hash'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
+/** Single-use authorization codes, valid for a few minutes after the user approves. */
+export const oauthCodes = pgTable('oauth_codes', {
+  codeHash: text('code_hash').primaryKey(),
+  clientId: text('client_id')
+    .notNull()
+    .references(() => oauthClients.id, { onDelete: 'cascade' }),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  redirectUri: text('redirect_uri').notNull(),
+  codeChallenge: text('code_challenge').notNull(),
+  scopes: text('scopes').array().notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+})
+
+/**
+ * A user's approval of one client: the current access and refresh token
+ * (hashed). Refreshing rotates both in place; deleting the row disconnects
+ * the app.
+ */
+export const oauthGrants = pgTable(
+  'oauth_grants',
+  {
+    id: text('id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    scopes: text('scopes').array().notNull(),
+    accessTokenHash: text('access_token_hash').notNull().unique(),
+    accessExpiresAt: timestamp('access_expires_at').notNull(),
+    refreshTokenHash: text('refresh_token_hash').notNull().unique(),
+    refreshExpiresAt: timestamp('refresh_expires_at').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at'),
+  },
+  (t) => [index('oauth_grants_user_idx').on(t.userId)],
+)
+
 // Better Auth's distributed rate-limit store. This is separate from the
 // application's fixed-window counters because Better Auth uses epoch millis.
 export const authRateLimit = pgTable('auth_rate_limit', {
@@ -266,4 +322,5 @@ export const auditLogs = pgTable(
 export type Link = typeof links.$inferSelect
 export type Click = typeof clicks.$inferSelect
 export type ApiKey = typeof apiKeys.$inferSelect
+export type OAuthClient = typeof oauthClients.$inferSelect
 export type AuditLog = typeof auditLogs.$inferSelect

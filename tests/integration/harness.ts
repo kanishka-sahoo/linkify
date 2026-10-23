@@ -47,7 +47,8 @@ export function migrate() {
 export async function resetDb() {
   await query(`truncate table
     "user", session, account, verification, two_factor, passkey,
-    links, clicks, api_keys, rate_limits, auth_rate_limit, audit_logs
+    links, clicks, api_keys, rate_limits, auth_rate_limit, audit_logs,
+    oauth_clients, oauth_codes, oauth_grants
     restart identity cascade`)
 }
 

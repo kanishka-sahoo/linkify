@@ -1,8 +1,10 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { createFileRoute } from '@tanstack/react-router'
-import { lt } from 'drizzle-orm'
+import { and, eq, lt, notExists } from 'drizzle-orm'
 import { db } from '~/lib/db'
-import { apiKeys, auditLogs, authRateLimit, clicks, rateLimits } from '~/lib/schema'
+import {
+  apiKeys, auditLogs, authRateLimit, clicks, oauthClients, oauthCodes, oauthGrants, rateLimits,
+} from '~/lib/schema'
 import { rollupClicks } from '~/lib/stats'
 
 function authorized(request: Request) {
@@ -39,6 +41,19 @@ export const Route = createFileRoute('/api/internal/cleanup')({
           db.delete(authRateLimit).where(lt(authRateLimit.lastRequest, authLimitCutoff)).returning({ id: authRateLimit.id }),
           db.delete(apiKeys).where(lt(apiKeys.expiresAt, now)).returning({ id: apiKeys.id }),
         ])
+        const [, lapsedGrants] = await Promise.all([
+          db.delete(oauthCodes).where(lt(oauthCodes.expiresAt, now)),
+          db.delete(oauthGrants).where(lt(oauthGrants.refreshExpiresAt, now)).returning({ id: oauthGrants.id }),
+        ])
+        // Registration is open, so forget clients nobody connected within a day.
+        const unusedClients = await db
+          .delete(oauthClients)
+          .where(and(
+            lt(oauthClients.createdAt, new Date(now.getTime() - 86_400_000)),
+            notExists(db.select().from(oauthGrants).where(eq(oauthGrants.clientId, oauthClients.id))),
+            notExists(db.select().from(oauthCodes).where(eq(oauthCodes.clientId, oauthClients.id))),
+          ))
+          .returning({ id: oauthClients.id })
 
         return Response.json(
           {
@@ -49,6 +64,8 @@ export const Route = createFileRoute('/api/internal/cleanup')({
               rateLimits: oldLimits.length,
               authRateLimits: oldAuthLimits.length,
               apiKeys: expiredKeys.length,
+              oauthGrants: lapsedGrants.length,
+              oauthClients: unusedClients.length,
             },
           },
           { headers: { 'cache-control': 'no-store' } },

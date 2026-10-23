@@ -4,6 +4,8 @@ import { BodyTooLargeError, readJsonLimited } from '~/lib/http'
 import { json } from '~/lib/api-response'
 import { JSONRPC_PARSE_ERROR, handlePost } from '~/lib/mcp-protocol'
 import { linkifyMcpServer } from '~/lib/mcp-tools'
+import { PROTECTED_RESOURCE_METADATA_PATH, MCP_PATH } from '~/lib/oauth'
+import { resolveAccessToken } from '~/lib/oauth-store'
 
 const MAX_JSON_BYTES = 64 * 1024
 
@@ -18,22 +20,38 @@ function foreignOrigin(request: Request) {
   return !allowed.has(origin)
 }
 
+/** An OAuth access token from a connected app (Claude, ChatGPT, …), or else an API key. */
+async function resolveCredential(request: Request) {
+  return (await resolveAccessToken(request)) ?? (await resolveApiKey(request))
+}
+
+/**
+ * The 401 challenge points MCP clients at the protected resource metadata
+ * (RFC 9728), from which they discover the OAuth server and sign the user in.
+ */
+function unauthorized(request: Request) {
+  const metadata = `${new URL(request.url).origin}${PROTECTED_RESOURCE_METADATA_PATH}${MCP_PATH}`
+  const presented = /^Bearer\s+\S/i.test(request.headers.get('authorization') ?? '')
+  return json({ error: 'Unauthorized' }, 401, {
+    'www-authenticate': `Bearer realm="linkify", resource_metadata="${metadata}"${presented ? ', error="invalid_token"' : ''}`,
+  })
+}
+
 const notAllowed = () => new Response(null, { status: 405, headers: { allow: 'POST' } })
 
 /**
  * Model Context Protocol endpoint (Streamable HTTP, JSON responses; protocol
  * 2026-07-28 plus the earlier handshake-based versions). Authenticates with
- * the same Bearer API keys as /api/v1; each tool needs one of the key's scopes.
+ * an OAuth access token from a connected app or the same Bearer API keys as
+ * /api/v1; each tool needs one of the credential's scopes.
  */
 export const Route = createFileRoute('/api/mcp')({
   server: {
     handlers: {
       POST: async ({ request }) => {
         if (foreignOrigin(request)) return json({ error: 'Forbidden origin' }, 403)
-        const key = await resolveApiKey(request)
-        if (!key) {
-          return json({ error: 'Unauthorized' }, 401, { 'www-authenticate': 'Bearer realm="linkify"' })
-        }
+        const key = await resolveCredential(request)
+        if (!key) return unauthorized(request)
         if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
           return json({ error: 'Content-Type must be application/json' }, 415)
         }

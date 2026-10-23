@@ -9,17 +9,33 @@ import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
 import { AuthCard, AuthShell } from '~/components/auth-shell'
 
+/**
+ * Where to go after signing in: a same-origin path (e.g. back to an app's
+ * OAuth consent screen), never another site.
+ */
+function safeRedirect(value: unknown) {
+  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\')
+    ? value
+    : undefined
+}
+
 export const Route = createFileRoute('/login')({
-  beforeLoad: async () => {
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
+    const target = safeRedirect(search.redirect)
+    return target ? { redirect: target } : {}
+  },
+  beforeLoad: async ({ search }) => {
     const { needsSetup, user } = await getBootstrap()
     if (needsSetup) throw redirect({ to: '/setup' })
-    if (user) throw redirect({ to: '/dashboard' })
+    if (user) throw redirect({ href: search.redirect ?? '/dashboard' })
   },
   component: LoginPage,
 })
 
 function LoginPage() {
   const router = useRouter()
+  const { redirect: target } = Route.useSearch()
+  const done = () => router.navigate({ href: target ?? '/dashboard' })
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [totpCode, setTotpCode] = useState('')
@@ -34,7 +50,7 @@ function LoginPage() {
       if ((data as { twoFactorRedirect?: boolean })?.twoFactorRedirect) {
         setAwaitingTotp(true)
       } else {
-        router.navigate({ to: '/dashboard' })
+        done()
       }
     }
     // Usernames can't contain '@', so anything with one is an email.
@@ -54,7 +70,7 @@ function LoginPage() {
       toast.error(error.message ?? 'Invalid code')
       return
     }
-    router.navigate({ to: '/dashboard' })
+    done()
   }
 
   async function onPasskey() {
@@ -65,7 +81,7 @@ function LoginPage() {
       if (error.status !== 400) toast.error(error.message ?? 'Passkey sign-in failed')
       return
     }
-    router.navigate({ to: '/dashboard' })
+    done()
   }
 
   return (

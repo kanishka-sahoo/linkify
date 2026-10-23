@@ -21,6 +21,13 @@ commits that shipped them; the dates below are the original commit dates.
   button. Guests still get the read-only details panel
 
 ### Added
+- OAuth sign-in for the MCP server, so Claude, ChatGPT, and other MCP hosts
+  can connect as a custom connector with just the server URL: the user signs
+  in to Linkify, picks which permissions to grant, and approves. Implements
+  OAuth 2.1 with PKCE, dynamic client registration, rotating refresh tokens,
+  and the protected-resource and authorization-server metadata MCP clients
+  discover. Connected apps are listed in **Settings → Connected apps**, where
+  they can be disconnected. API keys still work
 - Link details panel: open any link on the dashboard to see its status,
   schedule, expiry, click limit and usage, fallback URL, password and privacy
   settings, tags, owner, and timestamps. Read-only guests can see it too, so
