@@ -31,7 +31,13 @@ async function resolveCredential(request: Request) {
  */
 function unauthorized(request: Request) {
   const metadata = `${new URL(request.url).origin}${PROTECTED_RESOURCE_METADATA_PATH}${MCP_PATH}`
-  const presented = /^Bearer\s+\S/i.test(request.headers.get('authorization') ?? '')
+  const header = request.headers.get('authorization')
+  const presented = /^Bearer\s+\S/i.test(header ?? '')
+  // What kind of credential was refused (never the credential itself), to diagnose connectors.
+  const credential = !header ? 'none'
+    : !presented ? `${header.split(/\s/)[0]} scheme`
+      : /^Bearer\s+lka_/i.test(header) ? 'oauth token' : /^Bearer\s+lk_/i.test(header) ? 'api key' : 'unrecognized bearer token'
+  console.warn(`mcp: 401 (credential: ${credential}, user-agent: ${request.headers.get('user-agent') ?? 'none'})`)
   return json({ error: 'Unauthorized' }, 401, {
     'www-authenticate': `Bearer realm="linkify", resource_metadata="${metadata}"${presented ? ', error="invalid_token"' : ''}`,
   })

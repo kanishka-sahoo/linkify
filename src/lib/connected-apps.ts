@@ -60,20 +60,24 @@ export const getAuthorizationRequest = createServerFn({ method: 'GET' })
   .validator((input: unknown) => asObject(input))
   .handler(async ({ data }): Promise<AuthorizationView> => {
     const client = await findClient(data.client_id)
-    if (!client) return { kind: 'invalid', message: 'This app is not registered with Linkify. Try connecting again from the app.' }
+    if (!client) {
+      console.warn(`oauth: authorize: unknown client ${String(data.client_id)}`)
+      return { kind: 'invalid', message: 'This app is not registered with Linkify. Try connecting again from the app.' }
+    }
     let redirectUri = str(data.redirect_uri)
     if (!redirectUri && client.redirectUris.length === 1) redirectUri = client.redirectUris[0]
     if (!redirectUri || !redirectUriMatches(client.redirectUris, redirectUri)) {
+      console.warn(`oauth: authorize: redirect_uri ${String(redirectUri)} not registered for ${client.id}`)
       return { kind: 'invalid', message: "The app's redirect address doesn't match the one it registered." }
     }
 
     const requestUrl = getRequestUrl().href
     const state = str(data.state)
     const iss = issuerFor(requestUrl)
-    const fail = (error: string, description: string): AuthorizationView => ({
-      kind: 'redirect',
-      url: withParams(redirectUri, { error, error_description: description, state, iss }),
-    })
+    const fail = (error: string, description: string): AuthorizationView => {
+      console.warn(`oauth: authorize: ${error}: ${description} (client ${client.id})`)
+      return { kind: 'redirect', url: withParams(redirectUri, { error, error_description: description, state, iss }) }
+    }
     if (data.response_type !== 'code') return fail('unsupported_response_type', 'response_type must be code')
     if (data.code_challenge_method !== 'S256' || !isCodeChallenge(data.code_challenge)) {
       return fail('invalid_request', 'PKCE with code_challenge_method S256 is required')
