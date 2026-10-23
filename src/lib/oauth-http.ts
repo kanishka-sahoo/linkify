@@ -25,6 +25,7 @@ export const preflight = () => new Response(null, { status: 204, headers: { ...C
 /** An OAuthError as its RFC 6749 §5.2 error body; anything else is rethrown. */
 export function oauthErrorResponse(err: unknown) {
   if (!(err instanceof OAuthError)) throw err
+  console.warn(`oauth: ${err.code}: ${err.message}`)
   return oauthJson(
     { error: err.code, error_description: err.message },
     err.status,

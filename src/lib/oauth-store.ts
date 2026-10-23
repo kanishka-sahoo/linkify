@@ -201,10 +201,17 @@ export async function resolveAccessToken(request: Request) {
     .from(oauthGrants)
     .innerJoin(user, eq(oauthGrants.userId, user.id))
     .where(eq(oauthGrants.accessTokenHash, sha256(match[1])))
-  if (!row || row.grant.accessExpiresAt <= new Date()) return null
-  if (accountRestriction(row.owner) || isGuest(row.owner)) return null
+  // Logged without the token, so a connector that stops working can be diagnosed from the logs.
+  const reject = (reason: string) => {
+    console.warn(`oauth: access token rejected: ${reason}`, row ? { grant: row.grant.id, client: row.grant.clientId } : {})
+    return null
+  }
+  if (!row) return reject('unknown token')
+  if (row.grant.accessExpiresAt <= new Date()) return reject(`expired at ${row.grant.accessExpiresAt.toISOString()}`)
+  const restriction = accountRestriction(row.owner) ?? (isGuest(row.owner) ? 'guest account' : null)
+  if (restriction) return reject(restriction)
   const limit = await hitLimit(`api:${row.grant.id}`, 600, 60 * 1000)
-  if (!limit.allowed) return null
+  if (!limit.allowed) return reject('rate limited')
   db.update(oauthGrants)
     .set({ lastUsedAt: new Date() })
     .where(eq(oauthGrants.id, row.grant.id))
