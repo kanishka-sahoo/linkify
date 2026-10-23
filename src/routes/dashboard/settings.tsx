@@ -2,7 +2,7 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  Activity, AlertTriangle, AtSign, Check, Copy, Eye, Fingerprint, KeyRound, Laptop, Plus, ShieldCheck, Trash2,
+  Activity, AlertTriangle, AtSign, Check, Copy, Eye, Fingerprint, KeyRound, Laptop, Plug, Plus, ShieldCheck, Trash2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -10,6 +10,7 @@ import QRCode from 'qrcode'
 import { authClient } from '~/lib/auth-client'
 import { createApiKey, deleteApiKey } from '~/lib/links'
 import { changeMyPassword, getSettingsData, revokeOtherSessions, revokeSession } from '~/lib/settings'
+import { disconnectApp } from '~/lib/connected-apps'
 import { API_SCOPES, type ApiScope } from '~/lib/api-scopes'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
@@ -80,6 +81,7 @@ function SettingsPage() {
         <SessionsCard />
       </SettingsGroup>
       <SettingsGroup title="Developers">
+        <ConnectedAppsCard />
         <ApiKeysCard />
       </SettingsGroup>
       <SettingsGroup title="Activity">
@@ -436,6 +438,52 @@ function PasskeysCard() {
               <Button
                 variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive"
                 title="Remove passkey" aria-label={`Remove ${p.name ?? 'passkey'}`} onClick={() => remove(p.id)}
+              >
+                <Trash2 />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SettingsCard>
+  )
+}
+
+// ---------- Connected apps ----------
+
+function ConnectedAppsCard() {
+  const router = useRouter()
+  const { apps, mcpUrl } = Route.useLoaderData()
+
+  async function disconnect(id: string, name: string) {
+    if (!confirm(`Disconnect ${name}? It will lose access immediately.`)) return
+    await disconnectApp({ data: { id } })
+    toast.success('App disconnected')
+    router.invalidate()
+  }
+
+  return (
+    <SettingsCard
+      icon={Plug}
+      title="Connected apps"
+      description={<>AI assistants you've signed in to the MCP server with, such as Claude or ChatGPT. Add <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{mcpUrl}</code> as a custom connector to connect one.</>}
+      flush
+    >
+      {apps.length === 0 ? <ListEmpty>No apps connected.</ListEmpty> : (
+        <ul className="divide-y">
+          {apps.map((app) => (
+            <li key={app.id} className="flex items-center gap-3 px-5 py-3">
+              <div className="grid min-w-0 flex-1 gap-1">
+                <span className="truncate text-sm font-medium">{app.name}</span>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span>{app.scopes.join(', ')}</span>
+                  <span>Connected <LocalTime value={app.createdAt} dateOnly /></span>
+                  <span>Last used {app.lastUsedAt ? <LocalTime value={app.lastUsedAt} dateOnly /> : 'never'}</span>
+                </div>
+              </div>
+              <Button
+                variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive"
+                title="Disconnect" aria-label={`Disconnect ${app.name}`} onClick={() => disconnect(app.id, app.name)}
               >
                 <Trash2 />
               </Button>

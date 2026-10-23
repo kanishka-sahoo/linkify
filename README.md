@@ -18,7 +18,7 @@ A single-user / small-team link shortener with analytics, built on TanStack Star
 - **QR codes** — authenticated, owner-scoped per-link PNG generation (`/api/qr/:code`)
 - **Auth** — email + password, TOTP two-factor, passkeys, database-backed throttling, session management, and security activity. First-run registration requires the deployment's setup secret; administrators must enable TOTP before managing data or users
 - **REST API** — expiring bearer keys with explicit read/write/stats scopes; keys are per-user and owner-scoped (admin keys see all); link creation is capped at 30/hour per user
-- **MCP server** — AI agents (Claude Code, Claude Desktop, Cursor, …) can create, edit, pause, and delete links and read analytics over the Model Context Protocol, using the same API keys and scopes
+- **MCP server** — AI agents (Claude, ChatGPT, Claude Code, Cursor, …) can create, edit, pause, and delete links and read analytics over the Model Context Protocol. Connect with OAuth (sign in and approve, no key to copy) or with the same API keys and scopes as the REST API
 
 ## Stack
 
@@ -116,7 +116,7 @@ curl -X POST https://your-domain/api/v1/links \
 
 ## MCP server
 
-`POST /api/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server (Streamable HTTP, JSON responses), so AI agents can manage links in plain language. It implements protocol **2026-07-28**: requests are stateless, each carrying its version and capabilities in `_meta` with the mirrored `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers, and `server/discover` reports the server's versions and capabilities. Clients still on 2024-11-05 through 2025-11-25 get the older `initialize` handshake on the same endpoint, so both kinds of client work. It authenticates with the same API keys as the REST API: keys expire, their owners' account restrictions apply, and they see only their own links (admin keys see all). Each tool needs one of the key's scopes, and `tools/list` shows only the tools the key can call.
+`POST /api/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server (Streamable HTTP, JSON responses), so AI agents can manage links in plain language. It implements protocol **2026-07-28**: requests are stateless, each carrying its version and capabilities in `_meta` with the mirrored `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers, and `server/discover` reports the server's versions and capabilities. Clients still on 2024-11-05 through 2025-11-25 get the older `initialize` handshake on the same endpoint, so both kinds of client work. It authenticates with OAuth or with the same API keys as the REST API (see below). Either way, credentials expire, their owners' account restrictions apply, and they see only their own links (admins see all). Each tool needs one of the credential's scopes, and `tools/list` shows only the tools it can call.
 
 | Tool | Scope | Description |
 |------|-------|-------------|
@@ -130,6 +130,20 @@ curl -X POST https://your-domain/api/v1/links \
 | `get_analytics_overview` | `stats:read` | 30-day totals and top links across everything the key can see |
 
 Writes are audit-logged as `mcp.link.created` / `updated` / `deleted`. Requests with a browser `Origin` from another site are rejected.
+
+### Connecting with OAuth (Claude, ChatGPT, …)
+
+Hosts that support remote MCP servers with OAuth need only the server URL, `https://your-domain/api/mcp`:
+
+- **Claude** (claude.ai, Desktop, mobile): *Settings → Connectors → Add custom connector*, paste the URL, then **Connect**.
+- **ChatGPT**: with developer mode on, create a custom connector with the URL and **OAuth** authentication.
+- **Claude Code**: `claude mcp add --transport http linkify https://your-domain/api/mcp`, then `/mcp` to sign in.
+
+The host opens a Linkify page where you sign in (if you aren't already), choose which permissions to grant, and approve. Connected apps appear in **Settings → Connected apps**, where you can disconnect them. Guests and accounts that still need to change their password or (for admins) enable 2FA can't connect apps.
+
+Under the hood this is OAuth 2.1 as the MCP authorization spec describes it: a `401` from `/api/mcp` points to `/.well-known/oauth-protected-resource/api/mcp` (RFC 9728), which names this app as the authorization server (`/.well-known/oauth-authorization-server`, RFC 8414). Clients register themselves at `/api/oauth/register` (RFC 7591), send the user to `/oauth/authorize` with a PKCE S256 challenge, and exchange the code at `/api/oauth/token`. Access tokens last an hour; refresh tokens rotate on every use and lapse after 30 days without one. `/api/oauth/revoke` (RFC 7009) disconnects an app. OAuth tokens only work on `/api/mcp`, not the REST API.
+
+### Connecting with an API key
 
 Claude Code:
 
@@ -152,7 +166,7 @@ Other clients that take a JSON config (Claude Desktop, Cursor, …):
 }
 ```
 
-Use a key with only the scopes the agent needs; for example, `links:read` + `stats:read` for a reporting agent that can't change links.
+Grant only the scopes the agent needs, whether on the consent screen or the key; for example, `links:read` + `stats:read` for a reporting agent that can't change links.
 
 ## Notes
 
